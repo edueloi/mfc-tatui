@@ -282,7 +282,7 @@ const EventDetail: React.FC = () => {
         </ContentCard>
 
         <StatGrid cols={4}>
-          <StatCard title="Inscritos" value={stats.registered} icon={Users} color="info" description={stats.couples ? `${stats.couples} casais + inscrições` : peopleGoal ? `Meta ${peopleGoal}` : event.capacity ? `${event.capacity} vagas` : 'Pessoas, com acompanhantes'} />
+          <StatCard title="Inscritos" value={stats.registered} icon={Users} color="info" description={stats.couples ? `${stats.couples} ${stats.couples === 1 ? 'casal' : 'casais'} do encontro${registrations.length ? ' + inscrições' : ''}` : peopleGoal ? `Meta ${peopleGoal}` : event.capacity ? `${event.capacity} vagas` : 'Pessoas, com acompanhantes'} />
           <StatCard title="Entradas" value={money(stats.raised)} icon={TrendingUp} color="success" description={Number(event.goalValue) > 0 ? `Meta ${money(Number(event.goalValue))}` : 'Tudo que entrou no evento'} />
           <StatCard title="Gastos" value={money(stats.expensesTotal)} icon={TrendingDown} color="danger" description={stats.expensesExtra ? `${money(stats.expensesExtra)} a mais` : 'Previstos e a mais'} />
           <StatCard title="Resultado" value={money(result)} icon={Wallet} color={result >= 0 ? 'purple' : 'danger'} description="Entradas menos gastos" />
@@ -317,7 +317,20 @@ const EventDetail: React.FC = () => {
           </div>}
 
           {tab === 'inscritos' && <div className="space-y-3">
-            {meetingLink && <ContentCard padding="md" className="bg-rose-50 border-rose-100"><p className="flex flex-wrap items-center justify-between gap-2 text-xs text-rose-900"><span className="inline-flex items-center gap-2"><Heart size={14} />{stats.couples} {stats.couples === 1 ? 'casal inscrito' : 'casais inscritos'} no Encontro de Noivos (contam como {stats.couples * 2} pessoas).</span><Button size="xs" variant="outline" onClick={() => navigate(meetingLink)}>Ver casais</Button></p></ContentCard>}
+            {meetingLink && <PanelCard title="Casais do Encontro de Noivos" icon={Heart}
+              description={`${couples.length} ${couples.length === 1 ? 'casal' : 'casais'} no encontro, contados como ${couples.length * 2} pessoas.`}
+              action={<Button size="xs" variant="outline" onClick={() => navigate(meetingLink)}>Abrir o encontro</Button>}>
+              <GridTable<typeof couples[number]> data={couples} keyExtractor={couple => couple.id} noDesktopCard onRowClick={couple => navigate(`/encontro-noivos/${couple.id}`)}
+                columns={[
+                  { header: 'Casal', render: couple => <div className="min-w-0"><p className="text-xs font-medium text-slate-800 break-words">{couple.noivoName || 'Noivo'} &amp; {couple.noivaName || 'Noiva'}</p><p className="mt-0.5 text-[11px] text-slate-500">2 pessoas</p></div> },
+                  { header: 'Situação', render: couple => <Badge size="sm" dot color={couple.status === 'Confirmado' ? 'success' : couple.status === 'Cancelado' ? 'danger' : couple.status === 'Aguardando Pagamento' ? 'warning' : 'default'}>{couple.status}</Badge> },
+                  { header: 'Pagamento', render: couple => <div><Badge size="sm" color={couple.paymentStatus === 'Pago' ? 'success' : couple.paymentStatus === 'Parcial' ? 'purple' : couple.paymentStatus === 'Isento' ? 'info' : 'warning'}>{couple.paymentStatus}</Badge>{couple.paymentAmount > 0 && <p className="mt-1 text-[11px] tabular-nums text-slate-500">{money(couple.paymentAmount)}</p>}</div> },
+                  { header: 'Ficha', render: couple => <Button size="xs" variant="ghost" onClick={clickEvent => { clickEvent.stopPropagation(); navigate(`/encontro-noivos/${couple.id}`); }}>Abrir ficha</Button> },
+                ]}
+                emptyMessage={<EmptyState icon={Heart} title="Nenhum casal no encontro ainda" description="Os casais cadastrados no Encontro de Noivos aparecem aqui automaticamente." />} />
+            </PanelCard>}
+            {(!meetingLink || registrations.length > 0) && <>
+            {meetingLink && <p className="pt-1 text-xs font-semibold text-slate-800">Outras inscrições</p>}
             <FilterLine>
               <FilterLineSection grow>
                 <FilterLineItem grow><FilterLineSearch aria-label="Buscar inscrito" value={search} onChange={setSearch} placeholder="Nome, telefone ou e-mail…" /></FilterLineItem>
@@ -349,6 +362,7 @@ const EventDetail: React.FC = () => {
                   action={!registrations.length && status.canRegister && event.isActive ? <div className="flex flex-wrap justify-center gap-2"><Button size="sm" iconLeft={<UserPlus size={14} />} onClick={() => { setRegisterTeam(undefined); setShowRegister(true); }}>Inscrever</Button><Button variant="outline" size="sm" iconLeft={<Send size={14} />} onClick={() => setShowInvite(true)}>Convidar</Button></div> : undefined} />}
                 pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
             </ContentCard>
+            </>}
           </div>}
 
           {tab === 'itens' && <EventItemsPanel event={event} items={items} teams={teams} me={me ? { name: me.name, teamId: me.teamId } : null} canEdit={!locked && (staff || !!scope)} onChange={next => patch({ items: next, stats: { ...stats, itemsTotal: next.length, itemsDone: next.filter((item: EventItem) => item.status !== 'Pendente').length } })} />}
