@@ -101,7 +101,9 @@ const App: React.FC = () => {
               <Route path="livro-caixa" element={<GeneralLedger />} />
               <Route path="lancamentos" element={<DailyEntries />} />
               <Route path="encontro-noivos" element={<EncontroNoivos />} />
-              <Route path="encontro-noivos/:coupleId" element={<BridalCoupleDetail />} />
+              <Route path="encontro-noivos/casais" element={<EncontroNoivos />} />
+              <Route path="encontro-noivos/encontro/:meetingSlug" element={<EncontroNoivos />} />
+              <Route path="encontro-noivos/:coupleSlug" element={<BridalCoupleDetail />} />
               <Route path="nucleacao" element={<Nucleacao />} />
               <Route path="usuarios" element={<UserManagement />} />
               <Route path="configuracoes" element={<SettingsView />} />

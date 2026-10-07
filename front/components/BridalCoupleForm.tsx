@@ -11,10 +11,11 @@ import {
   Calendar,
 } from 'lucide-react';
 import { BridalPartner, BridalCoupleStatus, BridalPaymentStatus, BridalMeeting } from '../types';
-import { Button, Input, Select, DatePicker, Combobox, FileUpload, CepInput } from './ui';
+import { Button, Input, Select, DatePicker, Combobox, FileUpload, CepInput, Tabs } from './ui';
 import type { CepAddress } from './ui';
 import type { UploadedFileItem } from './ui';
 import { maskPhone, maskCEP, unmask } from '../utils/masks';
+import { dateLabel } from '../utils/dates';
 import { EDUCATION_LEVELS, RELIGIONS } from '../utils/domainLists';
 import { api } from '../api';
 import toast from 'react-hot-toast';
@@ -53,6 +54,8 @@ export interface BridalCoupleFormData {
 interface BridalCoupleFormProps {
   initialData?: Partial<BridalCoupleFormData>;
   mode: 'internal' | 'public';
+  /** "wizard": passo a passo (criação e formulário público). "tabs": abas livres com Salvar sempre visível (edição). */
+  layout?: 'wizard' | 'tabs';
   /** Pré-seleciona o Encontro ao criar uma nova ficha de dentro de uma turma específica. */
   defaultEventId?: string | null;
   onSave: (data: BridalCoupleFormData) => Promise<void> | void;
@@ -203,6 +206,7 @@ const AddressBlock = ({
 export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   initialData,
   mode,
+  layout = 'wizard',
   defaultEventId = null,
   onSave,
   onCancel,
@@ -213,6 +217,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
 }) => {
   const steps: Step[] = mode === 'public'
     ? ['casal', 'endereco', 'documentos', 'revisao']
+    : layout === 'tabs' ? ['casal', 'endereco', 'pagamento', 'documentos']
     : ['casal', 'endereco', 'pagamento', 'documentos', 'revisao'];
 
   const [stepIndex, setStepIndex] = useState(0);
@@ -248,7 +253,16 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   const goNext = () => setStepIndex(i => Math.min(i + 1, steps.length - 1));
   const goBack = () => setStepIndex(i => Math.max(i - 1, 0));
 
+  const validate = () => {
+    const emailOk = (value: string) => !value || /^[^s@]+@[^s@]+.[^s@]+$/.test(value.trim());
+    if (mode === 'public' ? !noivo.name.trim() || !noiva.name.trim() : !noivo.name.trim() && !noiva.name.trim()) return mode === 'public' ? 'Informe o nome completo do noivo e da noiva.' : 'Informe o nome de ao menos um dos noivos.';
+    if (!emailOk(noivo.email) || !emailOk(noiva.email)) return 'Confira o e-mail informado.';
+    return '';
+  };
+
   const handleSubmit = async () => {
+    const problem = validate();
+    if (problem) { toast.error(problem); setStepIndex(0); return; }
     await onSave({
       status,
       eventId,
@@ -261,6 +275,10 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
       noiva,
     });
   };
+
+  const wrap = (children: React.ReactNode) => layout === 'tabs'
+    ? <Tabs<Step> items={steps.map(step => ({ id: step, label: stepLabels[step], icon: stepIcons[step] }))} value={currentStep} onChange={step => setStepIndex(steps.indexOf(step))} label="Seções da ficha do casal">{children}</Tabs>
+    : children;
 
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
@@ -283,7 +301,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   return (
     <div className="space-y-4">
       {/* Progresso */}
-      <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200">
+      {layout === 'wizard' && (<div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200">
         <div className="flex items-center justify-between mb-2">
           {steps.map((s, i) => {
             const Icon = stepIcons[s];
@@ -306,9 +324,9 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
         <div className="h-1.5 bg-zinc-200 rounded-full overflow-hidden">
           <div className="h-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
         </div>
-      </div>
+      </div>)}
 
-      <div className="min-h-[320px]">
+      {wrap(<div className="min-h-[320px]">
         {currentStep === 'casal' && (
           <div className="space-y-5">
             {mode === 'internal' && (
@@ -317,7 +335,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
                   label="Encontro"
                   value={eventId || ''}
                   onChange={(e) => setEventId(e.target.value || null)}
-                  options={meetings.map(m => ({ value: m.id, label: `${m.name} — ${m.date}` }))}
+                  options={meetings.map(m => ({ value: m.id, label: `${m.name} — ${dateLabel(m.date) || m.date}` }))}
                   placeholder="Selecione o encontro"
                   iconLeft={<Calendar className="w-4 h-4" />}
                 />
@@ -420,30 +438,30 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
             )}
           </div>
         )}
-      </div>
+      </div>)}
 
-      <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
-        <div>
-          {stepIndex > 0 ? (
-            <Button variant="ghost" onClick={goBack} iconLeft={<ChevronLeft className="w-4 h-4" />}>
-              Voltar
-            </Button>
-          ) : onCancel ? (
-            <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-          ) : null}
+      {layout === 'tabs' ? (
+        <div className="flex justify-end border-t border-zinc-100 pt-3">
+          <Button size="sm" onClick={handleSubmit} loading={saving}>Salvar alterações</Button>
         </div>
-        <div>
-          {stepIndex < steps.length - 1 ? (
-            <Button variant="primary" onClick={goNext} iconRight={<ChevronRight className="w-4 h-4" />}>
-              Próximo
-            </Button>
-          ) : (
-            <Button variant="primary" onClick={handleSubmit} loading={saving}>
-              {mode === 'public' ? 'Enviar Inscrição' : 'Salvar Ficha'}
-            </Button>
-          )}
+      ) : (
+        <div className="flex items-center justify-between border-t border-zinc-100 pt-3">
+          <div>
+            {stepIndex > 0 ? (
+              <Button variant="ghost" size="sm" onClick={goBack} disabled={saving} iconLeft={<ChevronLeft className="w-4 h-4" />}>Voltar</Button>
+            ) : onCancel ? (
+              <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>Cancelar</Button>
+            ) : null}
+          </div>
+          <div>
+            {stepIndex < steps.length - 1 ? (
+              <Button size="sm" onClick={goNext} iconRight={<ChevronRight className="w-4 h-4" />}>Próximo</Button>
+            ) : (
+              <Button size="sm" onClick={handleSubmit} loading={saving}>{mode === 'public' ? 'Enviar inscrição' : 'Salvar ficha'}</Button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -9,6 +9,8 @@ Referência extraída das telas já ajustadas:
 | Minha equipe | `views/MyTeam.tsx` | páginas **com várias abas** e cards em grade |
 | Equipes Base (lista + detalhe) | `views/Teams.tsx` + `views/TeamDetail.tsx` + `components/TeamFormModal.tsx` | **lista de cards** + detalhe com membros e resumo, URL por nome |
 | Tesouraria (lista + equipe) | `views/Finance.tsx` + `components/FamilyPaymentModal.tsx` + `utils/billingUnits.ts` | telas **financeiras** com ação de receber (modal de confirmação de valor) |
+| Encontro de Noivos (encontros, casais, ficha) | `views/EncontroNoivos.tsx` + `views/BridalCoupleDetail.tsx` + `components/BridalCoupleForm.tsx` | hierarquia **encontro → casais → ficha** com URL por nome e formulário em abas |
+| Painel (Dashboard) | `views/Dashboard.tsx` | **painel** com abas para não amontoar (Visão geral / Aniversários / Financeiro) |
 | Relatórios | `views/Reports.tsx` | **painel de indicadores** (filtros de período, KPIs, abas Visão geral/Tabela) |
 | Criar/Editar MFCista | `views/MemberFormPage.tsx` + `components/MemberForm.tsx` | **formulários** de cadastro (mesma tela cria e edita) |
 
@@ -226,6 +228,20 @@ A Tesouraria usa o mesmo slug em `/financeiro/:teamSlug` (`teamPath(team, teams,
 - **Modal único** `FamilyPaymentModal`, usado em Minha equipe e na Tesouraria: mostra contribuintes, grade de meses, o **valor que está sendo recebido**, em que mês entra no caixa e quais mensalidades ficam quitadas; o botão traz o valor ("Confirmar R$ 90,00").
 - **Atraso**: o dinheiro entra no caixa do mês da **data do recebimento** (não pode ser futura). Meses anteriores ficam quitados como "Pago em atraso", mas **não** geram entrada no caixa deles. "Selecionar atrasadas" marca todos de uma vez.
 - Lançamentos parciais (um falhou) mantêm o modal aberto e o que já foi gravado fica bloqueado para não duplicar.
+
+## 8.2.3 Hierarquia com URL por nome (Encontro de Noivos)
+
+- Rotas: `/encontro-noivos` (encontros), `/encontro-noivos/casais` (todos), `/encontro-noivos/encontro/:meetingSlug`, `/encontro-noivos/:coupleSlug`. A navegação entre níveis é por **URL** (não por estado), então o botão voltar do navegador e o link compartilhado funcionam.
+- `utils/entitySlug.ts` é o slug genérico: recebe candidatos do menos ao mais específico (nome, nome + data) e desempata pelo id curto. `utils/bridalPaths.ts` aplica a encontros e casais.
+- Como o nome vira URL, **editar o nome muda o endereço**: depois de salvar, atualize a lista usada para resolver o slug (a tela faz `navigate(..., { replace: true })` sozinha).
+- Formulário longo com muitas seções: **passo a passo só na criação** e no formulário público; na **edição use abas livres** com o botão Salvar sempre visível (`layout="tabs"` em `BridalCoupleForm`).
+
+## 8.2.4 Painel sem amontoar
+
+- Máximo de 4 KPIs por linha (`StatGrid cols={4}`; 2 colunas no celular). O que não cabe vira **aba** (`Tabs`), não mais um card.
+- Aviso do que exige ação hoje (ex.: aniversariantes) fica **acima das abas**, em um único card com botão.
+- Distribuições simples (faixa etária, sexo) em barras CSS dentro de um `PanelCard`, sem gráfico pesado.
+- **Mensagens prontas de WhatsApp** (`utils/birthdayMessages.ts` + `utils/whatsapp.ts`): grupo por idade (menor de 18 = jovem; 60+ = terceira idade) e depois por sexo (mulher/homem do MFC). O botão abre `wa.me` com o texto codificado e fica desabilitado, com `title` explicando, quando falta telefone.
 
 ## 8.3 Conferir o formato da API antes de montar gráficos
 
