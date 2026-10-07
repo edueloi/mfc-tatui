@@ -16,6 +16,8 @@ import type { CepAddress } from './ui';
 import type { UploadedFileItem } from './ui';
 import { maskPhone, maskCEP, unmask } from '../utils/masks';
 import { dateLabel } from '../utils/dates';
+import { isMeetingClosed } from '../utils/meetingStatus';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 import { EDUCATION_LEVELS, RELIGIONS } from '../utils/domainLists';
 import { api } from '../api';
 import toast from 'react-hot-toast';
@@ -238,7 +240,9 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
     }
   }, [mode]);
 
-  const currentStep = steps[stepIndex];
+  // Na edição (abas livres) a aba fica na URL; no passo a passo continua só em estado.
+  const [urlStep, setUrlStep] = useUrlTab<Step>(steps, 'casal');
+  const currentStep = layout === 'tabs' ? urlStep : steps[stepIndex];
 
   const setPartner = (role: 'noivo' | 'noiva', field: keyof BridalPartner, value: any) => {
     const setter = role === 'noivo' ? setNoivo : setNoiva;
@@ -262,7 +266,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
 
   const handleSubmit = async () => {
     const problem = validate();
-    if (problem) { toast.error(problem); setStepIndex(0); return; }
+    if (problem) { toast.error(problem); setStepIndex(0); setUrlStep('casal'); return; }
     await onSave({
       status,
       eventId,
@@ -277,7 +281,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   };
 
   const wrap = (children: React.ReactNode) => layout === 'tabs'
-    ? <Tabs<Step> items={steps.map(step => ({ id: step, label: stepLabels[step], icon: stepIcons[step] }))} value={currentStep} onChange={step => setStepIndex(steps.indexOf(step))} label="Seções da ficha do casal">{children}</Tabs>
+    ? <Tabs<Step> items={steps.map(step => ({ id: step, label: stepLabels[step], icon: stepIcons[step] }))} value={currentStep} onChange={setUrlStep} label="Seções da ficha do casal">{children}</Tabs>
     : children;
 
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
@@ -335,7 +339,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
                   label="Encontro"
                   value={eventId || ''}
                   onChange={(e) => setEventId(e.target.value || null)}
-                  options={meetings.map(m => ({ value: m.id, label: `${m.name} — ${dateLabel(m.date) || m.date}` }))}
+                  options={meetings.filter(m => !isMeetingClosed(m) || m.id === eventId).map(m => ({ value: m.id, label: `${m.name} — ${dateLabel(m.date) || m.date}` }))}
                   placeholder="Selecione o encontro"
                   iconLeft={<Calendar className="w-4 h-4" />}
                 />

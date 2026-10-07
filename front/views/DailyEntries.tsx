@@ -20,6 +20,7 @@ import { PageWrapper, SectionTitle, StatGrid, ContentCard, PanelCard, Button, Gr
 import { StatCard } from '../components/ui/StatCard';
 import { formatPaymentDate } from '../utils/paymentAccounting';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 import { 
   BarChart, 
   Bar, 
@@ -61,7 +62,7 @@ const DailyEntries: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'entries' | 'summary'>('entries');
+  const [activeTab, setActiveTab] = useUrlTab(['lancamentos', 'resumo'] as const, 'lancamentos');
   const [showClear, setShowClear] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -138,8 +139,8 @@ const DailyEntries: React.FC = () => {
           <StatCard title="Total de saídas" value={formatCurrency(Math.abs(stats?.summary.total_expenses || 0))} icon={TrendingDown} color="danger" />
           <StatCard title="Saldo" value={formatCurrency(stats?.summary.balance || 0)} icon={DollarSign} color={(stats?.summary.balance || 0) >= 0 ? 'info' : 'danger'} />
         </StatGrid>
-        <Tabs<'entries' | 'summary'> items={[{ id: 'entries', label: 'Lançamentos', icon: FileSpreadsheet }, { id: 'summary', label: 'Resumo', icon: TrendingUp }]} value={activeTab} onChange={setActiveTab} label="Visualização dos lançamentos">
-          {activeTab === 'entries' ? <div className="space-y-3">
+        <Tabs<'lancamentos' | 'resumo'> items={[{ id: 'lancamentos', label: 'Lançamentos', icon: FileSpreadsheet }, { id: 'resumo', label: 'Resumo', icon: TrendingUp }]} value={activeTab} onChange={setActiveTab} label="Visualização dos lançamentos">
+          {activeTab === 'lancamentos' ? <div className="space-y-3">
             <FilterLine>
               <FilterLineSection grow><FilterLineSearch aria-label="Buscar lançamentos" value={searchTerm} onChange={setSearchTerm} placeholder="Descrição, conta ou centro de custo…" /></FilterLineSection>
               <FilterLineSection><span className="text-xs text-slate-500">{filteredEntries.length} registros</span>{searchTerm && <Button variant="ghost" size="sm" onClick={() => setSearchTerm('')}>Limpar busca</Button>}</FilterLineSection>

@@ -14,11 +14,13 @@ import { maskPhone } from '../utils/masks';
 import { dateLabel, yearsSince } from '../utils/dates';
 import { matchesDirectorySearch } from '../utils/memberDirectory';
 import { findTeamByParam, teamPath } from '../utils/teamSlug';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 
 const tabs = [
   { id: 'membros', label: 'Membros', icon: Users },
   { id: 'resumo', label: 'Resumo', icon: Cake },
 ] as const;
+const tabIds = tabs.map(tab => tab.id);
 
 const shortMonths = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const ageBands = [
@@ -43,7 +45,7 @@ const TeamDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [activeTab, setActiveTab] = useState<typeof tabs[number]['id']>('membros');
+  const [activeTab, setActiveTab] = useUrlTab(tabIds, 'membros');
   const [search, setSearch] = useState('');
   const [showAddMember, setShowAddMember] = useState(false);
   const [attachingId, setAttachingId] = useState<string | null>(null);
@@ -67,7 +69,6 @@ const TeamDetail: React.FC = () => {
       }
     };
     setLoading(true);
-    setActiveTab('membros');
     setSearch('');
     load();
     window.addEventListener('focus', load);
@@ -80,7 +81,7 @@ const TeamDetail: React.FC = () => {
   useEffect(() => {
     if (!team) return;
     const path = teamPath(team, teams);
-    if (path !== `/equipes/${teamParam}`) navigate(path, { replace: true });
+    if (path !== `/equipes/${teamParam}`) navigate({ pathname: path, search: window.location.search }, { replace: true });
   }, [team, teams, teamParam, navigate]);
 
   const teamMembers = useMemo(() => members.filter(member => team && member.teamId === team.id).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [members, team]);

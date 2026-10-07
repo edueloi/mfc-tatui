@@ -11,6 +11,8 @@ Referência extraída das telas já ajustadas:
 | Tesouraria (lista + equipe) | `views/Finance.tsx` + `components/FamilyPaymentModal.tsx` + `utils/billingUnits.ts` | telas **financeiras** com ação de receber (modal de confirmação de valor) |
 | Encontro de Noivos (encontros, casais, ficha) | `views/EncontroNoivos.tsx` + `views/BridalCoupleDetail.tsx` + `components/BridalCoupleForm.tsx` | hierarquia **encontro → casais → ficha** com URL por nome e formulário em abas |
 | Painel (Dashboard) | `views/Dashboard.tsx` | **painel** com abas para não amontoar (Visão geral / Aniversários / Financeiro) |
+| Nucleação (lista + contato) | `views/Nucleacao.tsx` + `views/NucleationDetail.tsx` + `components/NucleationContactModal.tsx` | lista de contatos → página do contato (URL por nome) com histórico e registro de tentativa |
+| Ajustes | `views/Settings.tsx` | tela com **abas na rota** (`/configuracoes/:aba`) e seções independentes |
 | Relatórios | `views/Reports.tsx` | **painel de indicadores** (filtros de período, KPIs, abas Visão geral/Tabela) |
 | Criar/Editar MFCista | `views/MemberFormPage.tsx` + `components/MemberForm.tsx` | **formulários** de cadastro (mesma tela cria e edita) |
 
@@ -243,6 +245,20 @@ A Tesouraria usa o mesmo slug em `/financeiro/:teamSlug` (`teamPath(team, teams,
 - Distribuições simples (faixa etária, sexo) em barras CSS dentro de um `PanelCard`, sem gráfico pesado.
 - **Mensagens prontas de WhatsApp** (`utils/birthdayMessages.ts` + `utils/whatsapp.ts`): grupo por idade (menor de 18 = jovem; 60+ = terceira idade) e depois por sexo (mulher/homem do MFC). O botão abre `wa.me` com o texto codificado e fica desabilitado, com `title` explicando, quando falta telefone.
 
+## 8.2.5 Aba na URL (regra para toda tela com abas)
+
+- **Toda aba deve estar na URL.** Use `useUrlTab(ids, padrão)` (`src/hooks/useUrlTab.ts`): lê/grava `?aba=<id>`, mantém os outros parâmetros (ex.: `?mes=7&ano=2026`), não mostra a aba padrão e ignora valor inválido. Assim o link abre na aba certa, o F5 não volta para a primeira e dá para compartilhar.
+- Declare os ids em constante (`const tabIds = tabs.map(tab => tab.id)`) e use ids em português e sem acento (`familias`, `aniversarios`).
+- **Não** chame `setActiveTab('primeira')` dentro de `useEffect` ao carregar: isso apaga a aba do link. Se precisar redirecionar para a URL com nome (slug), preserve `window.location.search`.
+- Seções grandes e independentes (Ajustes) usam **segmento de rota**: `/configuracoes/acessos`, `/configuracoes/unidades`, `/configuracoes/financeiro`; a rota sem aba redireciona para a primeira e aba inválida também. Seleções dentro da aba também vão na URL (`?perfil=supervisor`, pelo nome).
+- Formulário com abas livres (edição de ficha) segue a mesma regra; no passo a passo da criação o passo fica só em estado.
+
+## 8.2.6 Estado de ciclo de vida (encontro encerrado)
+
+- Quando algo "acontece e acaba" (encontro, campanha), mostre **Em andamento / Encerrado** e deixe fechar de duas formas: **manual** (botão Encerrar/Reabrir com confirmação) e **automática** por prazo (`utils/meetingStatus.ts`, `CLOSE_AFTER_DAYS = 7` depois da data). O estado derivado fica no front; o manual é o campo `isActive`.
+- Listas mostram só o que está em andamento por padrão, com filtro **Encerrados** e **Todos**. Encerrado não aceita novos vínculos (botão "Novo casal" desabilitado e fora das opções do formulário), mas continua consultável.
+- **Cuidado ao editar**: o `PUT` do backend deve manter o `isActive` quando o campo não vem (antes ele reabria o encontro a cada edição).
+
 ## 8.3 Conferir o formato da API antes de montar gráficos
 
 A tela de Relatórios lia `value`, `color` e `name`, que o backend (`dashboard.routes.js`) nunca enviou, então os gráficos ficavam vazios/0%. Antes de montar uma tela, abra a rota do backend e tipe a resposta (ver `interface Summary` em `Reports.tsx`). Não inventar dados no front (a linha de "meta" era `valor + 5`, e os gráficos de faixa etária/aniversário do detalhe de equipe eram números fixos).
@@ -287,6 +303,10 @@ Evitar: sombras (`shadow-md`), `tracking-wide`, caixa alta forçada, `text-[9px]
 8. Conferir mobile (390px) e `npx tsc --noEmit`.
 
 ---
+
+## Telas de configuração: não deixar controle que não faz nada
+
+Na revisão de Ajustes foram removidos controles que só gravavam no navegador e não afetavam o sistema (modo manutenção, notificações por e-mail, dia de vencimento, tolerância, percentual de repasse, pagamento parcial, geração automática, cor da marca) e um quadro com dados falsos do ambiente (versão, "PostgreSQL Cloud"). Regra: todo campo de configuração precisa ter efeito real no backend; o que ainda não existe fica fora da tela, não desabilitado com texto bonito.
 
 ## Pontos da Minha equipe que ainda NÃO seguem o padrão (não copiar)
 

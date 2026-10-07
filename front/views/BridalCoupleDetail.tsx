@@ -43,7 +43,7 @@ const BridalCoupleDetail: React.FC = () => {
   useEffect(() => {
     if (!target) return;
     const path = couplePath(target, list);
-    if (path !== `${BRIDAL_BASE}/${coupleSlug}`) navigate(path, { replace: true });
+    if (path !== `${BRIDAL_BASE}/${coupleSlug}`) navigate({ pathname: path, search: window.location.search }, { replace: true });
   }, [target, list, coupleSlug, navigate]);
 
   const meeting = couple?.eventId ? meetings.find(item => item.id === couple.eventId) : undefined;

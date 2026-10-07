@@ -1,890 +1,405 @@
-
-import React, { useState, useEffect } from 'react';
-import { 
-  Shield, 
-  MapPin, 
-  Plus, 
-  Trash2, 
-  Search, 
-  Lock, 
-  Globe, 
-  Settings as SettingsIcon, 
-  Filter, 
-  X, 
-  Building2, 
-  Save, 
-  ChevronDown,
-  Calendar,
-  Gift,
-  AlertTriangle,
-  Users,
-  Layers,
-  Power,
-  Edit3,
-  Clock,
-  History,
-  CheckCircle2,
-  ShieldCheck,
-  Eye,
-  Settings,
-  DollarSign,
-  UserCog,
-  ChevronRight,
-  ToggleLeft,
-  ToggleRight,
-  Percent,
-  BadgeDollarSign,
-  Bell,
-  Palette,
-  Info,
-  Heart,
-  PhoneCall
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import {
+  Shield, MapPin, Plus, Trash2, Settings as SettingsIcon, Building2, Save, CheckCircle2, AlertTriangle, Users, Layers, Power, Pencil,
+  DollarSign, UserCog, History, Heart, PhoneCall, ShieldCheck, Loader2, Info,
 } from 'lucide-react';
 import { api } from '../api';
-import { UserRoleType, ModuleAction, City } from '../types';
-import { 
-  PageWrapper, 
-  SectionTitle, 
-  StatGrid, 
-  ContentCard, 
-  Button, 
-  IconButton, 
-  Input, 
-  Select, 
-  Modal, 
-  ModalFooter,
-  Switch,
-  Badge,
-  ConfirmModal
+import { ModuleAction, City, User as UserType } from '../types';
+import {
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, PanelCard, Tabs, Button, IconButton, Input, Select, DatePicker, Modal, ModalFooter, Switch, Badge,
+  ConfirmModal, EmptyState, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch, FilterLineSegmented,
 } from '../components/ui';
-import { StatCard } from '../components/ui/StatCard';
-import { cn } from '../src/lib/utils';
-import toast from 'react-hot-toast';
+import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { entitySlug, findBySlug } from '../utils/entitySlug';
 
 const BRAZILIAN_STATES = [
-  { value: 'AC', label: 'Acre' }, { value: 'AL', label: 'Alagoas' }, { value: 'AP', label: 'Amapá' },
-  { value: 'AM', label: 'Amazonas' }, { value: 'BA', label: 'Bahia' }, { value: 'CE', label: 'Ceará' },
-  { value: 'DF', label: 'Distrito Federal' }, { value: 'ES', label: 'Espírito Santo' }, { value: 'GO', label: 'Goiás' },
-  { value: 'MA', label: 'Maranhão' }, { value: 'MT', label: 'Mato Grosso' }, { value: 'MS', label: 'Mato Grosso do Sul' },
-  { value: 'MG', label: 'Minas Gerais' }, { value: 'PA', label: 'Pará' }, { value: 'PB', label: 'Paraíba' },
-  { value: 'PR', label: 'Paraná' }, { value: 'PE', label: 'Pernambuco' }, { value: 'PI', label: 'Piauí' },
-  { value: 'RJ', label: 'Rio de Janeiro' }, { value: 'RN', label: 'Rio Grande do Norte' }, { value: 'RS', label: 'Rio Grande do Sul' },
-  { value: 'RO', label: 'Rondônia' }, { value: 'RR', label: 'Roraima' }, { value: 'SC', label: 'Santa Catarina' },
-  { value: 'SP', label: 'São Paulo' }, { value: 'SE', label: 'Sergipe' }, { value: 'TO', label: 'Tocantins' }
-];
+  ['AC', 'Acre'], ['AL', 'Alagoas'], ['AP', 'Amapá'], ['AM', 'Amazonas'], ['BA', 'Bahia'], ['CE', 'Ceará'], ['DF', 'Distrito Federal'], ['ES', 'Espírito Santo'],
+  ['GO', 'Goiás'], ['MA', 'Maranhão'], ['MT', 'Mato Grosso'], ['MS', 'Mato Grosso do Sul'], ['MG', 'Minas Gerais'], ['PA', 'Pará'], ['PB', 'Paraíba'],
+  ['PR', 'Paraná'], ['PE', 'Pernambuco'], ['PI', 'Piauí'], ['RJ', 'Rio de Janeiro'], ['RN', 'Rio Grande do Norte'], ['RS', 'Rio Grande do Sul'],
+  ['RO', 'Rondônia'], ['RR', 'Roraima'], ['SC', 'Santa Catarina'], ['SP', 'São Paulo'], ['SE', 'Sergipe'], ['TO', 'Tocantins'],
+].map(([value, label]) => ({ value, label: `${value} · ${label}` }));
 
 const MODULES = [
-  { id: 'dashboard', name: 'Dashboard', icon: History },
-  { id: 'mfcistas', name: 'Membros (MFCistas)', icon: Users },
+  { id: 'dashboard', name: 'Painel', icon: History },
+  { id: 'mfcistas', name: 'MFCistas', icon: Users },
   { id: 'equipes', name: 'Equipes Base', icon: Layers },
   { id: 'financeiro', name: 'Tesouraria de Equipes', icon: DollarSign },
-  { id: 'livro-caixa', name: 'Livro Caixa Geral', icon: Building2 },
+  { id: 'livro-caixa', name: 'Livro Caixa', icon: Building2 },
   { id: 'usuarios', name: 'Usuários do Sistema', icon: UserCog },
-  { id: 'configuracoes', name: 'Configurações', icon: Settings },
+  { id: 'configuracoes', name: 'Ajustes', icon: SettingsIcon },
   { id: 'encontro-noivos', name: 'Encontro de Noivos', icon: Heart },
   { id: 'nucleacao', name: 'Nucleação', icon: PhoneCall },
 ];
 
 const ACTIONS: { id: ModuleAction; name: string }[] = [
-  { id: 'view', name: 'Visualizar' },
-  { id: 'create', name: 'Criar' },
-  { id: 'edit', name: 'Editar' },
-  { id: 'delete', name: 'Excluir' },
-  { id: 'launch', name: 'Lançar' },
+  { id: 'view', name: 'Visualizar' }, { id: 'create', name: 'Criar' }, { id: 'edit', name: 'Editar' }, { id: 'delete', name: 'Excluir' }, { id: 'launch', name: 'Lançar' },
 ];
 
-interface RoleDefinition {
-  id: string;
-  name: string;
-  isSystem?: boolean;
-  permissions: {
-    [moduleId: string]: {
-      [actionId in ModuleAction]: boolean;
-    };
-  };
-}
+interface RoleDefinition { id: string; name: string; isSystem?: boolean; permissions: { [moduleId: string]: { [action in ModuleAction]?: boolean } }; }
+interface FinancialConfig { monthlyPaymentAmount: number; eventTicketDefaultValue: number; currency: string; }
 
-interface FinancialConfig {
-  monthlyPaymentAmount: number;
-  eventTicketDefaultValue: number;
-  currency: string;
-}
-
-interface AdvancedFinanceConfig {
-  dueDay: number;
-  graceDay: number;
-  repassePercentage: number;
-  allowPartialPayment: boolean;
-  autoGenerateMonthlyCharges: boolean;
-}
+const TABS = [
+  { id: 'acessos', label: 'Acessos', icon: Shield },
+  { id: 'unidades', label: 'Unidades', icon: MapPin },
+  { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
+] as const;
+type TabId = typeof TABS[number]['id'];
+const SETTINGS_BASE = '/configuracoes';
+const roleBases = (role: RoleDefinition) => [role.name];
+const emptyPermissions = (value: boolean) => Object.fromEntries(MODULES.map(module => [module.id, Object.fromEntries(ACTIONS.map(action => [action.id, value]))]));
 
 const SettingsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'geral' | 'permissoes' | 'cidades' | 'financeiro'>('geral');
-  const [citySearch, setCitySearch] = useState('');
+  const navigate = useNavigate();
+  const { tab } = useParams<{ tab?: string }>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [cities, setCities] = useState<City[]>([]);
-  
-  // State para Permissões
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
-  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const [newRoleName, setNewRoleName] = useState('');
-  const [permissionSearch, setPermissionSearch] = useState('');
-
-  // State para Configurações Gerais
-  const [generalSettings, setGeneralSettings] = useState({
-    institutionName: 'Movimento Familiar Cristão',
-    logoUrl: '',
-    primaryColor: '#2563eb',
-    supportEmail: 'contato@mfc.org.br',
-    notifications: true,
-    maintenanceMode: false
-  });
-
-  // State para Configurações Financeiras
-  const [financialConfig, setFinancialConfig] = useState<FinancialConfig>({
-    monthlyPaymentAmount: 50.00,
-    eventTicketDefaultValue: 100.00,
-    currency: 'BRL'
-  });
-  
-  const [citySortBy, setCitySortBy] = useState<'name' | 'status'>('name');
-  const [advancedFinance, setAdvancedFinance] = useState<AdvancedFinanceConfig>({
-    dueDay: 10,
-    graceDay: 5,
-    repassePercentage: 25,
-    allowPartialPayment: true,
-    autoGenerateMonthlyCharges: true
-  });
+  const [savedRoles, setSavedRoles] = useState<RoleDefinition[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [financial, setFinancial] = useState<FinancialConfig>({ monthlyPaymentAmount: 50, eventTicketDefaultValue: 100, currency: 'BRL' });
 
   useEffect(() => {
-    api.getCities().then(setCities).catch(() => setCities([]));
-    api.getRoles().then(setRoles).catch(() => setRoles([]));
-    
-    api.getFinancialConfig()
-      .then(setFinancialConfig)
-      .catch(() => {});
-
-    const storedAdvanced = localStorage.getItem('mfc.settings.advancedFinance');
-    if (storedAdvanced) {
-      try {
-        setAdvancedFinance(JSON.parse(storedAdvanced));
-      } catch (_) {}
-    }
-
-    const storedGeneral = localStorage.getItem('mfc.settings.general');
-    if (storedGeneral) {
-      try {
-        setGeneralSettings(prev => ({ ...prev, ...JSON.parse(storedGeneral) }));
-      } catch (_) {}
-    }
-  }, []);
-
-  useEffect(() => {
-    if (roles.length > 0 && !selectedRoleId) {
-      setSelectedRoleId(roles[0].id);
-    }
-  }, [roles, selectedRoleId]);
-
-  const [showCityModal, setShowCityModal] = useState(false);
-  const [cityToDelete, setCityToDelete] = useState<City | null>(null);
-  const [editingCityId, setEditingCityId] = useState<string | null>(null);
-  const [newCity, setNewCity] = useState({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
-
-  const filteredCities = cities
-    .filter(c =>
-      c.name.toLowerCase().includes(citySearch.toLowerCase()) ||
-      c.uf.toLowerCase().includes(citySearch.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (citySortBy === 'status') return Number(Boolean(b.active)) - Number(Boolean(a.active));
-      return a.name.localeCompare(b.name);
-    });
-
-  const activeCitiesCount = cities.filter((city) => city.active !== false).length;
-
-  const filteredModules = MODULES.filter((module) =>
-    module.name.toLowerCase().includes(permissionSearch.toLowerCase())
-  );
-
-  const handleSaveRole = () => {
-    if (!newRoleName.trim()) return;
-    api.createRole({ 
-      name: newRoleName, 
-      permissions: MODULES.reduce((acc, mod) => ({
-        ...acc,
-        [mod.id]: ACTIONS.reduce((actAcc, act) => ({ ...actAcc, [act.id]: false }), {})
-      }), {})
-    })
-      .then((created: RoleDefinition) => {
-        setRoles([...roles, created]);
-        setSelectedRoleId(created.id);
-        setShowRoleModal(false);
-        setNewRoleName('');
-        toast.success('Perfil criado com sucesso!');
+    let cancelled = false;
+    Promise.all([api.getCities(), api.getRoles(), api.getUsers().catch(() => []), api.getFinancialConfig()])
+      .then(([cityItems, roleItems, userItems, config]) => {
+        if (cancelled) return;
+        setCities(cityItems); setRoles(roleItems); setSavedRoles(roleItems); setUsers(userItems); setFinancial(config); setError(false);
       })
-      .catch(() => toast.error('Erro ao criar perfil.'));
-  };
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [retry]);
 
-  const togglePermission = (moduleId: string, actionId: ModuleAction) => {
-    const role = roles.find(r => r.id === selectedRoleId);
-    if (!role || role.isSystem) return;
+  const activeTab = TABS.find(item => item.id === tab)?.id;
+  if (!activeTab) return <Navigate to={`${SETTINGS_BASE}/acessos`} replace />;
 
-    setRoles(roles.map(r => {
-      if (r.id === selectedRoleId) {
-        return {
-          ...r,
-          permissions: {
-            ...r.permissions,
-            [moduleId]: {
-              ...r.permissions[moduleId],
-              [actionId]: !r.permissions[moduleId]?.[actionId]
-            }
-          }
-        };
-      }
-      return r;
-    }));
-  };
-
-  const handleSaveRolePermissions = () => {
-    const role = roles.find(r => r.id === selectedRoleId);
-    if (!role || role.isSystem) return;
-    toast.promise(
-      api.updateRole(role.id, { name: role.name, permissions: role.permissions })
-        .then((updated: RoleDefinition) => {
-          setRoles(roles.map(r => r.id === updated.id ? updated : r));
-        }),
-      {
-        loading: 'Salvando permissões...',
-        success: 'Permissões salvas! ✅',
-        error: 'Erro ao salvar permissões.'
-      }
-    );
-  };
-
-  const handleSaveCity = () => {
-    const cityNameTrimmed = newCity.name.trim();
-    if (!cityNameTrimmed) return;
-
-    const promise = editingCityId
-      ? api.updateCity(editingCityId, { name: cityNameTrimmed, uf: newCity.uf, mfcSince: newCity.mfcSince })
-      : api.createCity({ name: cityNameTrimmed, uf: newCity.uf, mfcSince: newCity.mfcSince });
-
-    toast.promise(
-      promise.then((res: any) => {
-        if (editingCityId) {
-          setCities(cities.map(c => c.id === editingCityId ? res : c));
-        } else {
-          setCities([...cities, res]);
-        }
-        setShowCityModal(false);
-      }),
-      {
-        loading: editingCityId ? 'Atualizando unidade...' : 'Criando unidade...',
-        success: editingCityId ? 'Unidade atualizada! 📍' : 'Unidade criada! 🎉',
-        error: 'Erro ao salvar unidade.'
-      }
-    );
-  };
-
-  const handleToggleCity = (city: City) => {
-    api.toggleCity(city.id, !city.active)
-      .then((updated: City) => {
-        setCities(cities.map(c => c.id === city.id ? updated : c));
-        toast.success(`Unidade ${updated.active ? 'ativada' : 'inativada'}!`);
-      });
-  };
-
-  const handleConfirmDeleteCity = () => {
-    if (!cityToDelete) return;
-    toast.promise(
-      api.deleteCity(cityToDelete.id).then(() => {
-        setCities(cities.filter(c => c.id !== cityToDelete.id));
-        setCityToDelete(null);
-      }),
-      {
-        loading: 'Excluindo unidade...',
-        success: 'Unidade excluída! 🗑️',
-        error: 'Erro ao excluir unidade.'
-      }
-    );
-  };
-
-  const handleSaveGeneral = () => {
-    localStorage.setItem('mfc.settings.general', JSON.stringify(generalSettings));
-    toast.success('Configurações gerais salvas!');
-  };
-
-  const handleSaveFinancial = () => {
-    toast.promise(
-      api.updateFinancialConfig(financialConfig).then(() => {
-        localStorage.setItem('mfc.settings.advancedFinance', JSON.stringify(advancedFinance));
-      }),
-      {
-        loading: 'Salvando configurações financeiras...',
-        success: 'Configurações financeiras salvas! 💰',
-        error: 'Erro ao salvar configurações financeiras.'
-      }
-    );
-  };
-
-  const selectedRole = roles.find(r => r.id === selectedRoleId);
+  if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando ajustes…</div></PageWrapper>;
+  if (error) return <PageWrapper><ContentCard><EmptyState icon={SettingsIcon} title="Não foi possível carregar os ajustes" description="Confira a conexão e tente novamente."
+    action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
   return (
     <PageWrapper>
-      <SectionTitle 
-        title="Configurações do Sistema"
-        description="Gerencie permissões, unidades e regras financeiras da plataforma."
-        icon={SettingsIcon}
-      />
-
-      <div className="flex bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/60 mb-8 max-w-fit">
-        {[
-          { id: 'geral', label: 'Geral', icon: Settings },
-          { id: 'permissoes', label: 'Acessos', icon: Shield },
-          { id: 'cidades', label: 'Unidades', icon: MapPin },
-          { id: 'financeiro', label: 'Financeiro', icon: DollarSign }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={cn(
-              "flex items-center gap-2 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-              activeTab === tab.id 
-                ? "bg-white text-blue-600 shadow-sm border border-slate-100" 
-                : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
+      <div className="space-y-4">
+        <SectionTitle title="Ajustes" icon={SettingsIcon} description="Perfis de acesso, unidades e regras financeiras." />
+        <Tabs<TabId> items={TABS} value={activeTab} onChange={id => navigate(`${SETTINGS_BASE}/${id}`)} label="Seções dos ajustes">
+          {activeTab === 'acessos' && <AccessSection roles={roles} setRoles={setRoles} savedRoles={savedRoles} setSavedRoles={setSavedRoles} users={users} />}
+          {activeTab === 'unidades' && <CitiesSection cities={cities} setCities={setCities} />}
+          {activeTab === 'financeiro' && <FinancialSection config={financial} onSaved={setFinancial} />}
+        </Tabs>
       </div>
-
-      {activeTab === 'geral' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="lg:col-span-2 space-y-6">
-            <ContentCard title="Identidade da Instituição">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <Input 
-                  label="Nome da Instituição"
-                  value={generalSettings.institutionName}
-                  onChange={e => setGeneralSettings({...generalSettings, institutionName: e.target.value})}
-                  iconLeft={<Building2 className="w-4 h-4 text-slate-400" />}
-                  wrapperClassName="sm:col-span-2"
-                />
-                <Input 
-                  label="Logo URL"
-                  value={generalSettings.logoUrl}
-                  onChange={e => setGeneralSettings({...generalSettings, logoUrl: e.target.value})}
-                  placeholder="https://..."
-                  iconLeft={<Globe className="w-4 h-4 text-slate-400" />}
-                />
-                <Input 
-                  label="E-mail de Suporte"
-                  type="email"
-                  value={generalSettings.supportEmail}
-                  onChange={e => setGeneralSettings({...generalSettings, supportEmail: e.target.value})}
-                />
-              </div>
-            </ContentCard>
-
-            <ContentCard title="Preferências do Sistema">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
-                      <Bell className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Notificações por E-mail</p>
-                      <p className="text-xs text-slate-400 font-bold italic">Enviar alertas automáticos sobre lançamentos e prazos.</p>
-                    </div>
-                  </div>
-                  <Switch 
-                    checked={generalSettings.notifications}
-                    onCheckedChange={v => setGeneralSettings({...generalSettings, notifications: v})}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
-                      <AlertTriangle className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Modo Manutenção</p>
-                      <p className="text-xs text-slate-400 font-bold italic">Bloquear acesso de usuários não-administradores.</p>
-                    </div>
-                  </div>
-                  <Switch 
-                    checked={generalSettings.maintenanceMode}
-                    onCheckedChange={v => setGeneralSettings({...generalSettings, maintenanceMode: v})}
-                  />
-                </div>
-              </div>
-            </ContentCard>
-            
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleSaveGeneral}
-                iconLeft={<Save className="w-4 h-4" />}
-                className="px-10"
-              >
-                Salvar Alterações
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <ContentCard title="Resumo do Ambiente">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Versão</span>
-                  <Badge color="default">v2.4.0-stable</Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Ambiente</span>
-                  <Badge color="success">Produção</Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Database</span>
-                  <span className="font-black text-slate-700">PostgreSQL Cloud</span>
-                </div>
-              </div>
-            </ContentCard>
-
-            <ContentCard title="Personalização Visual">
-               <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full border-2 border-slate-200" style={{ backgroundColor: generalSettings.primaryColor }} />
-                    <Input 
-                      value={generalSettings.primaryColor}
-                      onChange={e => setGeneralSettings({...generalSettings, primaryColor: e.target.value})}
-                      placeholder="#000000"
-                      size="sm"
-                      wrapperClassName="flex-1"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-bold italic">Cor principal utilizada em botões e destaques.</p>
-               </div>
-            </ContentCard>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'permissoes' && (
-        <div className="flex flex-col lg:flex-row gap-8 animate-in slide-in-from-left-4 duration-500">
-          <div className="lg:w-80 space-y-4 shrink-0">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Perfis de Acesso</h3>
-              <IconButton 
-                onClick={() => setShowRoleModal(true)}
-                variant="primary"
-                size="sm"
-              >
-                <Plus className="w-4 h-4" />
-              </IconButton>
-            </div>
-            
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-3 space-y-2">
-              {roles.map(role => (
-                <button
-                  key={role.id}
-                  onClick={() => setSelectedRoleId(role.id)}
-                  className={cn(
-                    "w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all group",
-                    selectedRoleId === role.id 
-                      ? "bg-blue-600 text-white shadow-xl shadow-blue-100" 
-                      : "text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                  )}
-                >
-                  <div className={cn(
-                    "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                    selectedRoleId === role.id ? "bg-white/20" : "bg-slate-100 text-slate-400 group-hover:bg-blue-50"
-                  )}>
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <span className="flex-1 text-left truncate">{role.name}</span>
-                  {selectedRoleId === role.id && <ChevronRight className="w-4 h-4" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <ContentCard padding="none" className="flex-1 overflow-hidden flex flex-col">
-            <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white sticky top-0 z-10">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">Permissões: {selectedRole?.name}</h3>
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1 italic">
-                  {selectedRole?.isSystem ? 'Perfil de sistema (Protegido)' : 'Configure as ações permitidas para este perfil'}
-                </p>
-              </div>
-              {!selectedRole?.isSystem && (
-                <IconButton 
-                  variant="danger" 
-                  onClick={() => {}} 
-                >
-                  <Trash2 className="w-5 h-5" />
-                </IconButton>
-              )}
-            </div>
-
-            <div className="px-8 py-4 border-b border-slate-50 bg-white">
-              <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
-                <Input 
-                  value={permissionSearch}
-                  onChange={(e) => setPermissionSearch(e.target.value)}
-                  placeholder="Buscar módulo..."
-                  iconLeft={<Search className="w-4 h-4 text-slate-300" />}
-                  wrapperClassName="max-w-md w-full"
-                />
-                {!selectedRole?.isSystem && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="xs" onClick={() => {
-                      setRoles(roles.map((r) => r.id === selectedRoleId ? ({ ...r, permissions: Object.fromEntries(MODULES.map((m) => [m.id, { view: true, create: true, edit: true, delete: true, launch: true }])) as any }) : r));
-                    }}>Liberar Tudo</Button>
-                    <Button variant="ghost" size="xs" onClick={() => {
-                      setRoles(roles.map((r) => r.id === selectedRoleId ? ({ ...r, permissions: Object.fromEntries(MODULES.map((m) => [m.id, { view: false, create: false, edit: false, delete: false, launch: false }])) as any }) : r));
-                    }}>Zerar</Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="overflow-x-auto no-scrollbar">
-              <table className="w-full text-left border-separate border-spacing-0">
-                <thead>
-                  <tr className="bg-slate-50/50">
-                    <th className="px-10 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 sticky left-0 bg-slate-50/50 z-20">Módulo / Tela</th>
-                    {ACTIONS.map(action => (
-                      <th key={action.id} className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-center">{action.name}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {filteredModules.map(module => (
-                    <tr key={module.id} className="hover:bg-blue-50/10 transition-colors group">
-                      <td className="px-10 py-5 sticky left-0 bg-white group-hover:bg-blue-50/10 z-10 border-r border-slate-50">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center transition-colors group-hover:bg-blue-600 group-hover:text-white shadow-sm border border-slate-100">
-                            <module.icon className="w-5 h-5" />
-                          </div>
-                          <span className="text-sm font-black text-slate-700 tracking-tight">{module.name}</span>
-                        </div>
-                      </td>
-                      {ACTIONS.map(action => {
-                        const isAllowed = selectedRole?.permissions[module.id]?.[action.id] || false;
-                        return (
-                          <td key={action.id} className="px-6 py-5 text-center">
-                            <button 
-                              disabled={selectedRole?.isSystem}
-                              onClick={() => togglePermission(module.id, action.id)}
-                              className={cn(
-                                "p-2.5 rounded-2xl transition-all border shadow-sm",
-                                isAllowed 
-                                  ? "text-emerald-600 bg-emerald-50 border-emerald-100" 
-                                  : "text-slate-200 bg-slate-50 border-slate-100 hover:bg-slate-100",
-                                selectedRole?.isSystem ? "cursor-not-allowed opacity-50" : "cursor-pointer active:scale-95"
-                              )}
-                            >
-                              {isAllowed ? <CheckCircle2 className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            
-            {!selectedRole?.isSystem && (
-              <div className="p-8 bg-slate-50/50 border-t border-slate-50 flex justify-end">
-                <Button 
-                  onClick={handleSaveRolePermissions}
-                  iconLeft={<Save className="w-4 h-4" />}
-                >
-                  Salvar Configurações
-                </Button>
-              </div>
-            )}
-          </ContentCard>
-        </div>
-      )}
-
-      {activeTab === 'cidades' && (
-        <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
-          <StatGrid cols={3}>
-            <StatCard title="Total Unidades" value={cities.length} icon={Building2} color="info" />
-            <StatCard title="Ativas" value={activeCitiesCount} icon={CheckCircle2} color="success" />
-            <StatCard title="Inativas" value={cities.length - activeCitiesCount} icon={AlertTriangle} color="warning" />
-          </StatGrid>
-
-          <div className="flex flex-col lg:flex-row gap-4 px-1 lg:px-0">
-            <Select 
-              value={citySortBy}
-              onChange={(e) => setCitySortBy(e.target.value as any)}
-              options={[
-                { value: 'name', label: 'Ordenar por Nome' },
-                { value: 'status', label: 'Ordenar por Status' }
-              ]}
-              wrapperClassName="lg:w-64"
-            />
-            <Input 
-              value={citySearch}
-              onChange={(e) => setCitySearch(e.target.value)}
-              placeholder="Pesquisar unidade..."
-              iconLeft={<Search className="w-4 h-4 text-slate-300" />}
-              wrapperClassName="flex-1"
-            />
-            <Button 
-              onClick={() => {
-                setEditingCityId(null);
-                setNewCity({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
-                setShowCityModal(true);
-              }}
-              iconLeft={<Plus className="w-5 h-5" />}
-            >
-              Nova Unidade
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCities.map(city => (
-              <div 
-                key={city.id} 
-                className={cn(
-                  "bg-white p-7 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col group hover:shadow-2xl transition-all relative overflow-hidden",
-                  !city.active && "opacity-70 bg-slate-50/50"
-                )}
-              >
-                <div className="flex items-center justify-between mb-8">
-                  <div className={cn(
-                    "w-16 h-16 rounded-3xl flex items-center justify-center transition-all shadow-inner border",
-                    city.active ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-slate-100 text-slate-400 border-slate-200"
-                  )}>
-                    <MapPin className="w-8 h-8" />
-                  </div>
-                  <div className="flex gap-1.5">
-                    <IconButton 
-                      variant={city.active ? "success" : "ghost"}
-                      onClick={() => handleToggleCity(city)}
-                      title={city.active ? "Inativar" : "Ativar"}
-                    >
-                      <Power className="w-5 h-5" />
-                    </IconButton>
-                    <IconButton 
-                      variant="danger"
-                      onClick={() => setCityToDelete(city)}
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </IconButton>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-2xl font-black tracking-tight text-slate-900">{city.name}</h3>
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Unidade {city.uf}</p>
-                </div>
-                <div className="mt-10 pt-6 border-t border-slate-50 flex items-center justify-between">
-                   <Badge color={city.active ? 'success' : 'default'}>
-                     {city.active ? 'Ativo' : 'Inativo'}
-                   </Badge>
-                   <Button 
-                    variant="ghost" 
-                    size="xs"
-                    onClick={() => {
-                      setEditingCityId(city.id);
-                      setNewCity({ name: city.name, uf: city.uf, mfcSince: city.mfcSince || '' });
-                      setShowCityModal(true);
-                    }}
-                    iconLeft={<Edit3 className="w-3.5 h-3.5" />}
-                  >
-                    Editar
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'financeiro' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-right-4 duration-500">
-          <div className="lg:col-span-2 space-y-6">
-            <ContentCard title="Regras de Mensalidade">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                <Input 
-                  label="Valor mensal por casal ou membro"
-                  type="number"
-                  addonLeft="R$"
-                  value={financialConfig.monthlyPaymentAmount}
-                  onChange={e => setFinancialConfig({...financialConfig, monthlyPaymentAmount: parseFloat(e.target.value) || 0})}
-                  hint="Cobrado uma vez por casal ou para cada membro individual com mensalidade ativa."
-                />
-                <Input 
-                  label="Cota de Repasse (Unidade)"
-                  type="number"
-                  addonLeft="R$"
-                  value={financialConfig.eventTicketDefaultValue}
-                  onChange={e => setFinancialConfig({...financialConfig, eventTicketDefaultValue: parseFloat(e.target.value) || 0})}
-                  hint="Referência para o repasse fixo da unidade ao MFC Nacional."
-                />
-              </div>
-            </ContentCard>
-
-            <ContentCard title="Automação e Prazos">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <Input 
-                  label="Dia Vencimento"
-                  type="number"
-                  min={1} max={31}
-                  value={advancedFinance.dueDay}
-                  onChange={e => setAdvancedFinance({...advancedFinance, dueDay: Number(e.target.value)})}
-                  iconLeft={<Calendar className="w-4 h-4 text-slate-400" />}
-                />
-                <Input 
-                  label="Tolerância (Dias)"
-                  type="number"
-                  min={0}
-                  value={advancedFinance.graceDay}
-                  onChange={e => setAdvancedFinance({...advancedFinance, graceDay: Number(e.target.value)})}
-                  iconLeft={<Clock className="w-4 h-4 text-slate-400" />}
-                />
-                <Input 
-                  label="Percentual Repasse"
-                  type="number"
-                  addonRight="%"
-                  value={advancedFinance.repassePercentage}
-                  onChange={e => setAdvancedFinance({...advancedFinance, repassePercentage: Number(e.target.value)})}
-                />
-              </div>
-            </ContentCard>
-
-            <div className="flex justify-end">
-               <Button onClick={handleSaveFinancial} iconLeft={<Save className="w-4 h-4" />}>
-                 Atualizar Regras Financeiras
-               </Button>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <ContentCard title="Políticas de Cobrança">
-              <div className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-blue-800">Regra das famílias</p>
-                <p className="mt-1 text-xs leading-relaxed text-blue-700">Filhos e demais dependentes não entram na mensalidade. A cobrança considera o casal ou o membro individual que não esteja isento.</p>
-              </div>
-              <div className="space-y-6">
-                <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">Pagamento Parcial</p>
-                    <p className="text-[9px] text-slate-400 font-bold italic">Permitir abater valores menores que a mensalidade.</p>
-                  </div>
-                  <Switch 
-                    checked={advancedFinance.allowPartialPayment}
-                    onCheckedChange={v => setAdvancedFinance({...advancedFinance, allowPartialPayment: v})}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight">Geração Automática</p>
-                    <p className="text-[9px] text-slate-400 font-bold italic">Criar novas cobranças no início de cada mês.</p>
-                  </div>
-                  <Switch 
-                    checked={advancedFinance.autoGenerateMonthlyCharges}
-                    onCheckedChange={v => setAdvancedFinance({...advancedFinance, autoGenerateMonthlyCharges: v})}
-                  />
-                </div>
-              </div>
-            </ContentCard>
-
-            <div className="p-6 bg-blue-600 rounded-[2.5rem] text-white shadow-xl shadow-blue-100">
-               <div className="flex items-center gap-3 mb-4">
-                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                   <Info className="w-5 h-5 text-white" />
-                 </div>
-                 <h4 className="font-black uppercase tracking-widest text-[11px]">Dica Financeira</h4>
-               </div>
-               <p className="text-xs font-bold leading-relaxed opacity-90">
-                 As configurações de mensalidade são aplicadas globalmente na unidade. Alterações aqui afetarão novos lançamentos automáticos.
-               </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODALS */}
-      <Modal 
-        isOpen={showRoleModal} 
-        onClose={() => setShowRoleModal(false)}
-        title="Novo Perfil de Acesso"
-        size="md"
-      >
-        <div className="space-y-6">
-          <p className="text-sm text-slate-500 font-bold italic">Defina o nome do novo nível de acesso. Você poderá configurar as permissões detalhadas logo após a criação.</p>
-          <Input 
-            label="Nome do Perfil"
-            placeholder="Ex: Supervisor, Tesoureiro Junior..."
-            value={newRoleName}
-            onChange={e => setNewRoleName(e.target.value)}
-            autoFocus
-          />
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setShowRoleModal(false)}>Cancelar</Button>
-          <Button onClick={handleSaveRole} disabled={!newRoleName.trim()}>Criar e Configurar</Button>
-        </ModalFooter>
-      </Modal>
-
-      <Modal
-        isOpen={showCityModal}
-        onClose={() => setShowCityModal(false)}
-        title={editingCityId ? 'Editar Unidade' : 'Nova Unidade'}
-        size="md"
-      >
-        <div className="space-y-6">
-          <Input 
-            label="Nome da Unidade"
-            placeholder="Ex: Tatuí"
-            value={newCity.name}
-            onChange={e => setNewCity({...newCity, name: e.target.value})}
-          />
-          <div className="grid grid-cols-2 gap-4">
-            <Select 
-              label="Estado (UF)"
-              value={newCity.uf}
-              onChange={e => setNewCity({...newCity, uf: e.target.value})}
-              options={BRAZILIAN_STATES}
-            />
-            <Input 
-              label="MFC Desde"
-              type="date"
-              value={newCity.mfcSince}
-              onChange={e => setNewCity({...newCity, mfcSince: e.target.value})}
-            />
-          </div>
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setShowCityModal(false)}>Cancelar</Button>
-          <Button onClick={handleSaveCity} iconLeft={<Save className="w-4 h-4" />}>
-            {editingCityId ? 'Salvar Alterações' : 'Adicionar Unidade'}
-          </Button>
-        </ModalFooter>
-      </Modal>
-
-      <ConfirmModal 
-        isOpen={!!cityToDelete}
-        onClose={() => setCityToDelete(null)}
-        onConfirm={handleConfirmDeleteCity}
-        title="Excluir Unidade"
-        message={`Tem certeza que deseja excluir a unidade ${cityToDelete?.name}? Todos os dados vinculados a esta unidade poderão ser afetados.`}
-        confirmLabel="Sim, Excluir Permanente"
-        variant="danger"
-      />
-
     </PageWrapper>
   );
+};
+
+/* ───────────────────────────── Acessos ───────────────────────────── */
+
+const AccessSection: React.FC<{ roles: RoleDefinition[]; setRoles: React.Dispatch<React.SetStateAction<RoleDefinition[]>>; savedRoles: RoleDefinition[]; setSavedRoles: React.Dispatch<React.SetStateAction<RoleDefinition[]>>; users: UserType[] }> = ({ roles, setRoles, savedRoles, setSavedRoles, users }) => {
+  const [params, setParams] = useSearchParams();
+  const [search, setSearch] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const role = findBySlug(roles, params.get('perfil') || undefined, roleBases) || roles[0];
+  const selectRole = (item: RoleDefinition) => setParams(prev => { const next = new URLSearchParams(prev); next.set('perfil', entitySlug(item, roles, roleBases)); return next; }, { replace: true });
+
+  const saved = savedRoles.find(item => item.id === role?.id);
+  const dirty = !!role && JSON.stringify(role.permissions) !== JSON.stringify(saved?.permissions);
+  const usersWithRole = role ? users.filter(user => user.role === role.name).length : 0;
+  const query = normalizeDirectoryText(search);
+  const modules = MODULES.filter(module => !query || normalizeDirectoryText(module.name).includes(query));
+
+  const setPermissions = (permissions: RoleDefinition['permissions']) => role && setRoles(prev => prev.map(item => item.id === role.id ? { ...item, permissions } : item));
+  const toggle = (moduleId: string, action: ModuleAction) => role && !role.isSystem && setPermissions({ ...role.permissions, [moduleId]: { ...role.permissions[moduleId], [action]: !role.permissions[moduleId]?.[action] } });
+  const setModule = (moduleId: string, value: boolean) => role && !role.isSystem && setPermissions({ ...role.permissions, [moduleId]: Object.fromEntries(ACTIONS.map(action => [action.id, value])) });
+
+  const nameError = !newName.trim() ? '' : newName.trim().length < 3 ? 'Mínimo de 3 letras.' : roles.some(item => item.name.toLowerCase() === newName.trim().toLowerCase()) ? 'Já existe um perfil com este nome.' : '';
+
+  const createRole = async () => {
+    if (!newName.trim() || nameError || creating) return;
+    setCreating(true);
+    try {
+      const created: RoleDefinition = await api.createRole({ name: newName.trim(), permissions: emptyPermissions(false) });
+      setRoles(prev => [...prev, created]); setSavedRoles(prev => [...prev, created]);
+      setParams(prev => { const next = new URLSearchParams(prev); next.set('perfil', entitySlug(created, [...roles, created], roleBases)); return next; }, { replace: true });
+      setShowNew(false); setNewName('');
+      toast.success('Perfil criado. Marque as permissões e salve.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível criar o perfil.'); }
+    finally { setCreating(false); }
+  };
+
+  const save = async () => {
+    if (!role || role.isSystem || !dirty || saving) return;
+    setSaving(true);
+    try {
+      const updated: RoleDefinition = await api.updateRole(role.id, { name: role.name, permissions: role.permissions });
+      setRoles(prev => prev.map(item => item.id === updated.id ? updated : item)); setSavedRoles(prev => prev.map(item => item.id === updated.id ? updated : item));
+      toast.success('Permissões salvas.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível salvar as permissões.'); }
+    finally { setSaving(false); }
+  };
+
+  const removeRole = async () => {
+    if (!role || role.isSystem || deleting) return;
+    setDeleting(true);
+    try {
+      await api.deleteRole(role.id);
+      setRoles(prev => prev.filter(item => item.id !== role.id)); setSavedRoles(prev => prev.filter(item => item.id !== role.id));
+      setParams(prev => { const next = new URLSearchParams(prev); next.delete('perfil'); return next; }, { replace: true });
+      setShowDelete(false);
+      toast.success('Perfil excluído.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível excluir o perfil.'); }
+    finally { setDeleting(false); }
+  };
+
+  if (!role) return <ContentCard><EmptyState icon={Shield} title="Nenhum perfil cadastrado" description="Crie o primeiro perfil de acesso." action={<Button size="sm" onClick={() => setShowNew(true)}>Novo perfil</Button>} /></ContentCard>;
+
+  return <div className="grid grid-cols-1 gap-3 lg:grid-cols-[18rem_1fr]">
+    <PanelCard title="Perfis de acesso" description={`${roles.length} perfis`} className="self-start"
+      action={<Button size="xs" iconLeft={<Plus size={12} />} onClick={() => setShowNew(true)}>Novo perfil</Button>}>
+      <ul className="space-y-1" aria-label="Perfis de acesso">
+        {roles.map(item => <li key={item.id}>
+          <button type="button" aria-current={item.id === role.id} onClick={() => selectRole(item)}
+            className={`flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-[13px] transition-colors focus-visible:outline-blue-500 ${item.id === role.id ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-transparent text-slate-700 hover:bg-slate-50'}`}>
+            <ShieldCheck size={14} className="shrink-0" /><span className="min-w-0 flex-1 break-words">{item.name}</span>{item.isSystem && <Badge size="sm">Sistema</Badge>}
+          </button>
+        </li>)}
+      </ul>
+    </PanelCard>
+
+    <div className="min-w-0 space-y-3">
+      <ContentCard padding="md">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-900 break-words">Permissões: {role.name}</h2>
+            <p className="mt-0.5 text-xs text-slate-500">{role.isSystem ? 'Perfil de sistema, protegido: tem acesso total e não pode ser alterado.' : `${usersWithRole} ${usersWithRole === 1 ? 'usuário usa' : 'usuários usam'} este perfil.`}</p>
+          </div>
+          {!role.isSystem && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={() => setShowDelete(true)}>Excluir perfil</Button>}
+        </div>
+      </ContentCard>
+
+      <FilterLine>
+        <FilterLineSection grow><FilterLineItem grow><FilterLineSearch aria-label="Buscar módulo" value={search} onChange={setSearch} placeholder="Buscar módulo…" /></FilterLineItem></FilterLineSection>
+        {!role.isSystem && <FilterLineSection align="right">
+          <Button variant="outline" size="sm" onClick={() => setPermissions(emptyPermissions(true))}>Liberar tudo</Button>
+          <Button variant="ghost" size="sm" onClick={() => setPermissions(emptyPermissions(false))}>Zerar</Button>
+        </FilterLineSection>}
+      </FilterLine>
+
+      <ContentCard padding="none">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-separate border-spacing-0 text-left">
+            <thead><tr className="bg-slate-50">
+              <th scope="col" className="sticky left-0 z-10 border-b border-slate-100 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold text-slate-500">Módulo</th>
+              {ACTIONS.map(action => <th key={action.id} scope="col" className="border-b border-slate-100 px-3 py-2.5 text-center text-[11px] font-semibold text-slate-500">{action.name}</th>)}
+              {!role.isSystem && <th scope="col" className="border-b border-slate-100 px-3 py-2.5 text-center text-[11px] font-semibold text-slate-500">Todos</th>}
+            </tr></thead>
+            <tbody>{modules.map(module => {
+              const all = ACTIONS.every(action => role.isSystem || role.permissions[module.id]?.[action.id]);
+              return <tr key={module.id} className="hover:bg-slate-50/60">
+                <th scope="row" className="sticky left-0 z-10 border-b border-slate-50 bg-white px-3 py-2.5 text-left font-normal">
+                  <span className="flex items-center gap-2.5 text-[13px] text-slate-800"><module.icon size={14} className="shrink-0 text-slate-400" />{module.name}</span>
+                </th>
+                {ACTIONS.map(action => <td key={action.id} className="border-b border-slate-50 px-3 py-2.5 text-center">
+                  <Switch size="sm" aria-label={`${module.name}: ${action.name}`} checked={role.isSystem ? true : !!role.permissions[module.id]?.[action.id]} disabled={role.isSystem} onCheckedChange={() => toggle(module.id, action.id)} />
+                </td>)}
+                {!role.isSystem && <td className="border-b border-slate-50 px-3 py-2.5 text-center"><Switch size="sm" aria-label={`${module.name}: todas as ações`} checked={all} onCheckedChange={value => setModule(module.id, value)} /></td>}
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+        {modules.length === 0 && <EmptyState icon={Shield} title="Nenhum módulo encontrado" description="Ajuste a busca." className="m-3" />}
+        {!role.isSystem && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
+          <p className="text-xs text-slate-500">{dirty ? 'Há alterações não salvas.' : 'Tudo salvo.'}</p>
+          <Button size="sm" iconLeft={<Save size={14} />} loading={saving} disabled={!dirty} onClick={save}>Salvar permissões</Button>
+        </div>}
+      </ContentCard>
+    </div>
+
+    <Modal isOpen={showNew} onClose={() => !creating && setShowNew(false)} title="Novo perfil de acesso" size="sm"
+      footer={<ModalFooter><Button variant="ghost" size="sm" disabled={creating} onClick={() => setShowNew(false)}>Cancelar</Button><Button size="sm" loading={creating} disabled={!newName.trim() || !!nameError} onClick={createRole}>Criar perfil</Button></ModalFooter>}>
+      <div className="space-y-2">
+        <p className="text-xs leading-relaxed text-slate-500">Defina o nome do perfil. Em seguida você marca o que ele pode fazer em cada módulo.</p>
+        <Input label="Nome do perfil" placeholder="Ex.: Supervisor" value={newName} onChange={event => setNewName(event.target.value)} autoFocus />
+        {nameError && <p role="alert" className="text-xs text-red-600">{nameError}</p>}
+      </div>
+    </Modal>
+
+    {usersWithRole > 0
+      ? <Modal isOpen={showDelete} onClose={() => setShowDelete(false)} title="Não é possível excluir" size="sm" footer={<ModalFooter><Button size="sm" onClick={() => setShowDelete(false)}>Entendi</Button></ModalFooter>}>
+        <p className="text-[13px] leading-relaxed text-slate-600">O perfil <strong className="text-slate-900">{role.name}</strong> é usado por {usersWithRole} {usersWithRole === 1 ? 'usuário' : 'usuários'}. Troque o perfil deles antes de excluir.</p>
+      </Modal>
+      : <ConfirmModal isOpen={showDelete} onClose={() => setShowDelete(false)} onConfirm={removeRole} loading={deleting} title="Excluir perfil?" message={`O perfil "${role.name}" será excluído. Esta ação não pode ser desfeita.`} confirmLabel="Excluir perfil" variant="danger" />}
+  </div>;
+};
+
+/* ───────────────────────────── Unidades ───────────────────────────── */
+
+const CitiesSection: React.FC<{ cities: City[]; setCities: React.Dispatch<React.SetStateAction<City[]>> }> = ({ cities, setCities }) => {
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState('name');
+  const [editing, setEditing] = useState<City | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<City | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const query = normalizeDirectoryText(search);
+  const visible = useMemo(() => cities
+    .filter(city => !query || normalizeDirectoryText(`${city.name} ${city.uf}`).includes(query))
+    .sort((a, b) => sort === 'status' ? Number(b.active !== false) - Number(a.active !== false) || a.name.localeCompare(b.name, 'pt-BR') : a.name.localeCompare(b.name, 'pt-BR')), [cities, query, sort]);
+  const activeCount = cities.filter(city => city.active !== false).length;
+
+  const toggle = async (city: City) => {
+    if (togglingId) return;
+    setTogglingId(city.id);
+    try {
+      const updated: City = await api.toggleCity(city.id, city.active === false);
+      setCities(prev => prev.map(item => item.id === city.id ? updated : item));
+      toast.success(updated.active ? 'Unidade ativada.' : 'Unidade inativada.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível alterar a unidade.'); }
+    finally { setTogglingId(null); }
+  };
+
+  const remove = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await api.deleteCity(deleteTarget.id);
+      setCities(prev => prev.filter(city => city.id !== deleteTarget.id));
+      toast.success('Unidade excluída.');
+      setDeleteTarget(null);
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível excluir a unidade.'); }
+    finally { setDeleting(false); }
+  };
+
+  return <div className="space-y-3">
+    <StatGrid cols={3}>
+      <StatCard title="Unidades" value={cities.length} icon={Building2} color="info" />
+      <StatCard title="Ativas" value={activeCount} icon={CheckCircle2} color="success" />
+      <StatCard title="Inativas" value={cities.length - activeCount} icon={AlertTriangle} color="warning" />
+    </StatGrid>
+    <FilterLine>
+      <FilterLineSection grow>
+        <FilterLineItem grow><FilterLineSearch aria-label="Buscar unidade" value={search} onChange={setSearch} placeholder="Nome ou UF…" /></FilterLineItem>
+        <FilterLineItem><FilterLineSegmented value={sort} onChange={value => setSort(String(value))} options={[{ value: 'name', label: 'Por nome' }, { value: 'status', label: 'Por situação' }]} /></FilterLineItem>
+      </FilterLineSection>
+      <FilterLineSection align="right"><Button size="sm" iconLeft={<Plus size={14} />} onClick={() => { setEditing(null); setShowForm(true); }}>Nova unidade</Button></FilterLineSection>
+    </FilterLine>
+
+    {visible.length === 0
+      ? <ContentCard><EmptyState icon={MapPin} title="Nenhuma unidade encontrada" description={search ? 'Ajuste a busca.' : 'Cadastre a primeira unidade.'} /></ContentCard>
+      : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{visible.map(city => {
+        const active = city.active !== false;
+        return <ContentCard key={city.id} padding="none" className={`flex h-full flex-col overflow-hidden ${active ? '' : 'bg-slate-50'}`}>
+          <div className="flex flex-1 flex-col gap-3 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className={`flex h-7 w-7 items-center justify-center rounded-md border ${active ? 'border-blue-100 bg-blue-50 text-blue-600' : 'border-slate-200 bg-slate-100 text-slate-400'}`}><MapPin size={14} /></div>
+              <Badge size="sm" dot color={active ? 'success' : 'default'}>{active ? 'Ativa' : 'Inativa'}</Badge>
+            </div>
+            <div><h3 className="text-sm font-semibold text-slate-900 break-words">{city.name}</h3><p className="mt-1 text-xs text-slate-500">{city.uf}{city.mfcSince ? ` · MFC desde ${new Date(`${city.mfcSince.slice(0, 10)}T12:00:00`).getFullYear()}` : ''}</p></div>
+          </div>
+          <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
+            <Button variant="outline" size="xs" className="flex-1" iconLeft={<Power size={12} />} loading={togglingId === city.id} disabled={!!togglingId} onClick={() => toggle(city)}>{active ? 'Inativar' : 'Ativar'}</Button>
+            <IconButton variant="ghost" size="xs" aria-label={`Editar ${city.name}`} className="h-8 w-8" onClick={() => { setEditing(city); setShowForm(true); }}><Pencil size={14} /></IconButton>
+            <IconButton variant="ghost" size="xs" aria-label={`Excluir ${city.name}`} className="h-8 w-8" onClick={() => setDeleteTarget(city)}><Trash2 size={14} className="text-red-500" /></IconButton>
+          </div>
+        </ContentCard>;
+      })}</div>}
+
+    <CityModal isOpen={showForm} city={editing} onClose={() => setShowForm(false)} onSaved={(saved, mode) => setCities(prev => mode === 'created' ? [...prev, saved] : prev.map(city => city.id === saved.id ? saved : city))} />
+    <ConfirmModal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={remove} loading={deleting} title="Excluir unidade?"
+      message={`A unidade ${deleteTarget?.name} será excluída e os dados vinculados a ela podem ser afetados. Esta ação não pode ser desfeita.`} confirmLabel="Excluir unidade" variant="danger" />
+  </div>;
+};
+
+const CityModal: React.FC<{ isOpen: boolean; city: City | null; onClose: () => void; onSaved: (city: City, mode: 'created' | 'updated') => void }> = ({ isOpen, city, onClose, onSaved }) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ name: '', uf: 'SP', mfcSince: today });
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  useEffect(() => { if (isOpen) setForm(city ? { name: city.name, uf: city.uf, mfcSince: (city.mfcSince || '').slice(0, 10) } : { name: '', uf: 'SP', mfcSince: today }); }, [isOpen, city]); // eslint-disable-line react-hooks/exhaustive-deps
+  const invalid = form.name.trim().length < 2;
+
+  const save = async () => {
+    if (invalid || savingRef.current) return;
+    savingRef.current = true; setSaving(true);
+    try {
+      const payload = { name: form.name.trim(), uf: form.uf, mfcSince: form.mfcSince || null };
+      const saved: City = city ? await api.updateCity(city.id, payload) : await api.createCity(payload);
+      toast.success(city ? 'Unidade atualizada.' : 'Unidade criada.');
+      onSaved(saved, city ? 'updated' : 'created');
+      onClose();
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível salvar a unidade.'); }
+    finally { savingRef.current = false; setSaving(false); }
+  };
+
+  return <Modal isOpen={isOpen} onClose={() => !saving && onClose()} title={city ? 'Editar unidade' : 'Nova unidade'} size="sm"
+    footer={<ModalFooter><Button variant="ghost" size="sm" disabled={saving} onClick={onClose}>Cancelar</Button><Button size="sm" loading={saving} disabled={invalid} onClick={save}>{city ? 'Salvar' : 'Criar unidade'}</Button></ModalFooter>}>
+    <div className="space-y-3">
+      <Input label="Nome da unidade" placeholder="Ex.: Tatuí" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Select label="Estado" value={form.uf} onChange={event => setForm({ ...form, uf: event.target.value })} options={BRAZILIAN_STATES} />
+        <DatePicker label="MFC desde" value={form.mfcSince} onChange={value => setForm({ ...form, mfcSince: value || '' })} />
+      </div>
+    </div>
+  </Modal>;
+};
+
+/* ───────────────────────────── Financeiro ───────────────────────────── */
+
+const FinancialSection: React.FC<{ config: FinancialConfig; onSaved: (config: FinancialConfig) => void }> = ({ config, onSaved }) => {
+  const [form, setForm] = useState({ monthly: String(config.monthlyPaymentAmount ?? ''), quota: String(config.eventTicketDefaultValue ?? '') });
+  const [saving, setSaving] = useState(false);
+  const monthly = parseFloat(form.monthly.replace(',', '.'));
+  const quota = parseFloat(form.quota.replace(',', '.'));
+  const errors = { monthly: !(monthly > 0) ? 'Informe um valor maior que zero.' : '', quota: !(quota >= 0) ? 'Informe um valor válido.' : '' };
+  const dirty = monthly !== Number(config.monthlyPaymentAmount) || quota !== Number(config.eventTicketDefaultValue);
+  const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const save = async () => {
+    if (errors.monthly || errors.quota || saving) return;
+    setSaving(true);
+    try {
+      const next = { ...config, monthlyPaymentAmount: monthly, eventTicketDefaultValue: quota };
+      await api.updateFinancialConfig(next);
+      onSaved(next);
+      toast.success('Regras financeiras salvas.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível salvar as regras financeiras.'); }
+    finally { setSaving(false); }
+  };
+
+  return <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+    <PanelCard title="Regras de mensalidade" description="Valores aplicados em toda a unidade." className="lg:col-span-2">
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div><Input label="Mensalidade por casal ou membro" type="number" min={0} step="0.01" addonLeft="R$" value={form.monthly} onChange={event => setForm({ ...form, monthly: event.target.value })}
+            hint="Cobrada uma vez por casal, dividida entre os dois, ou por membro individual ativo." />{errors.monthly && <p role="alert" className="mt-1 text-xs text-red-600">{errors.monthly}</p>}</div>
+          <div><Input label="Cota de repasse da unidade" type="number" min={0} step="0.01" addonLeft="R$" value={form.quota} onChange={event => setForm({ ...form, quota: event.target.value })}
+            hint="Valor de referência do repasse da unidade ao MFC Nacional." />{errors.quota && <p role="alert" className="mt-1 text-xs text-red-600">{errors.quota}</p>}</div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <p className="text-xs text-slate-500">{dirty ? 'Há alterações não salvas.' : 'Tudo salvo.'}</p>
+          <Button size="sm" iconLeft={<Save size={14} />} loading={saving} disabled={!dirty || !!errors.monthly || !!errors.quota} onClick={save}>Salvar regras</Button>
+        </div>
+      </div>
+    </PanelCard>
+    <PanelCard title="Como a cobrança funciona" icon={Info}>
+      <ul className="space-y-2.5 text-xs leading-relaxed text-slate-600">
+        <li>Só o titular e o cônjuge pagam. Filhos e demais dependentes ficam na família, sem cobrança.</li>
+        <li>No casal, {Number.isFinite(monthly) && monthly > 0 ? `${money(monthly)} é dividido: ${money(monthly / 2)} para cada um` : 'o valor é dividido entre os dois'}.</li>
+        <li>Quem está isento ou sem contribuição ativa não entra no valor da família.</li>
+        <li>A alteração vale para novos cálculos; recebimentos já lançados não mudam.</li>
+      </ul>
+    </PanelCard>
+  </div>;
 };
 
 export default SettingsView;

@@ -1,429 +1,147 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import {
-  PhoneCall,
-  Plus,
-  Phone,
-  UserPlus,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Heart,
-} from 'lucide-react';
+import { PhoneCall, Plus, Phone, UserPlus, Clock, XCircle, Heart, MessageCircle, Trash2, ArrowRight, Loader2 } from 'lucide-react';
 import { api } from '../api';
-import { NucleationContact, NucleationAttempt, User as UserType } from '../types';
+import { NucleationContact } from '../types';
 import {
-  PageWrapper,
-  SectionTitle,
-  StatGrid,
-  StatCard,
-  ContentCard,
-  Button,
-  FilterLine,
-  FilterLineSection,
-  FilterLineItem,
-  FilterLineSearch,
-  FilterLineSegmented,
-  GridTable,
-  EmptyState,
-  Badge,
-  Modal,
-  ModalFooter,
-  ConfirmModal,
-  Input,
-  Select,
-  DatePicker,
-  usePagination,
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
+  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, usePagination,
 } from '../components/ui';
 import type { Column } from '../components/ui';
+import { NucleationContactModal } from '../components/NucleationContactModal';
 import { usePermission } from '../src/hooks/usePermission';
+import { maskPhone } from '../utils/masks';
+import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { whatsappUrl } from '../utils/whatsapp';
+import { contactPath } from '../utils/nucleationPaths';
+import { STATUS_COLOR } from '../utils/nucleationStatus';
 
-const RESULT_COLOR: Record<string, 'success' | 'danger' | 'warning' | 'info'> = {
-  Sucesso: 'success',
-  'Sem Sucesso': 'danger',
-  Reagendado: 'warning',
-  Agendado: 'info',
-};
-
-const STATUS_COLOR: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
-  Pendente: 'warning',
-  'Em Andamento': 'info',
-  Convertido: 'success',
-  'Sem Sucesso': 'danger',
-};
+const firstContactMessage = (name: string) => `Olá, ${name.split(/\s+&\s+|\s+e\s+/)[0].split(' ')[0]}! Tudo bem? Aqui é do MFC (Movimento Familiar Cristão). Gostaríamos de conversar sobre a continuidade da caminhada depois do Encontro de Noivos. Podemos falar? 🙏`;
 
 const Nucleacao: React.FC = () => {
+  const navigate = useNavigate();
   const canCreate = usePermission('nucleacao', 'create');
-  const canEdit = usePermission('nucleacao', 'edit');
   const canDelete = usePermission('nucleacao', 'delete');
 
   const [contacts, setContacts] = useState<NucleationContact[]>([]);
-  const [users, setUsers] = useState<UserType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
-
   const [showNewModal, setShowNewModal] = useState(false);
-  const [newContact, setNewContact] = useState({ name: '', phone1: '', phone2: '' });
-  const [saving, setSaving] = useState(false);
-
-  const [selectedContact, setSelectedContact] = useState<NucleationContact | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NucleationContact | null>(null);
-
-  const [newAttempt, setNewAttempt] = useState({ scheduledDate: '', contactedBy: '', result: 'Agendado', notes: '' });
-  const [convertTarget, setConvertTarget] = useState<NucleationContact | null>(null);
-
-  const loadContacts = () => {
-    api.getNucleationContacts().then(setContacts).catch(() => setContacts([]));
-  };
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    loadContacts();
-    api.getUsers().then(setUsers).catch(() => setUsers([]));
-  }, []);
+    let cancelled = false;
+    const load = () => api.getNucleationContacts()
+      .then((items: NucleationContact[]) => { if (!cancelled) { setContacts(items); setError(false); } })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    load();
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.removeEventListener('focus', load); };
+  }, [retry]);
 
-  const filtered = useMemo(() => {
-    return contacts.filter(c => {
-      const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [contacts, search, statusFilter]);
-
-  const { page, setPage, pageSize, setPageSize, paginatedData } = usePagination(filtered);
+  const query = normalizeDirectoryText(search);
+  const digits = search.replace(/\D/g, '');
+  const filtered = useMemo(() => contacts.filter(contact =>
+    (!query || normalizeDirectoryText(contact.name).includes(query) || (digits.length >= 3 && [contact.phone1, contact.phone2].some(phone => (phone || '').replace(/\D/g, '').includes(digits))))
+    && (statusFilter === 'Todos' || contact.status === statusFilter)
+  ), [contacts, query, digits, statusFilter]);
+  const { page, setPage, pageSize, setPageSize, paginatedData } = usePagination(filtered, 15);
 
   const stats = useMemo(() => ({
     total: contacts.length,
-    emAndamento: contacts.filter(c => c.status === 'Em Andamento').length,
-    convertidos: contacts.filter(c => c.status === 'Convertido').length,
-    semSucesso: contacts.filter(c => c.status === 'Sem Sucesso').length,
+    emAndamento: contacts.filter(contact => contact.status === 'Em Andamento').length,
+    convertidos: contacts.filter(contact => contact.status === 'Convertido').length,
+    semSucesso: contacts.filter(contact => contact.status === 'Sem Sucesso').length,
   }), [contacts]);
+  const hasFilter = !!query || statusFilter !== 'Todos';
 
-  const openDetail = (contact: NucleationContact) => {
-    api.getNucleationContact(contact.id).then(setSelectedContact).catch(() => toast.error('Erro ao carregar contato.'));
-  };
-
-  const handleCreate = async () => {
-    if (!newContact.name.trim()) {
-      toast.error('Informe o nome do contato.');
-      return;
-    }
-    setSaving(true);
+  const handleDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
     try {
-      const created = await api.createNucleationContact(newContact);
-      setContacts(prev => [created, ...prev]);
-      setShowNewModal(false);
-      setNewContact({ name: '', phone1: '', phone2: '' });
-      toast.success('Contato criado!');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao criar contato.');
-    } finally {
-      setSaving(false);
-    }
+      await api.deleteNucleationContact(deleteTarget.id);
+      setContacts(prev => prev.filter(contact => contact.id !== deleteTarget.id));
+      toast.success('Contato excluído.');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível excluir o contato.');
+    } finally { setDeleting(false); }
   };
 
-  const handleConfirmDelete = () => {
-    if (!deleteTarget) return;
-    toast.promise(
-      api.deleteNucleationContact(deleteTarget.id).then(() => {
-        setContacts(prev => prev.filter(c => c.id !== deleteTarget.id));
-        setDeleteTarget(null);
-      }),
-      { loading: 'Excluindo contato...', success: 'Contato excluído!', error: 'Erro ao excluir contato.' }
-    );
-  };
-
-  const handleRegisterAttempt = async () => {
-    if (!selectedContact) return;
-    try {
-      const updated = await api.createNucleationAttempt(selectedContact.id, newAttempt);
-      setSelectedContact(updated);
-      setContacts(prev => prev.map(c => c.id === updated.id ? { ...c, status: updated.status, attemptsCount: (c.attemptsCount || 0) + 1 } : c));
-      setNewAttempt({ scheduledDate: '', contactedBy: '', result: 'Agendado', notes: '' });
-      toast.success('Tentativa registrada!');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao registrar tentativa.');
-    }
-  };
-
-  const handleConvert = async () => {
-    if (!convertTarget) return;
-    try {
-      const result = await api.convertNucleationContact(convertTarget.id);
-      setContacts(prev => prev.map(c => c.id === convertTarget.id ? result.contact : c));
-      setSelectedContact(result.contact);
-      setConvertTarget(null);
-      toast.success(`${result.member.name} convertido em MFCista!`);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao converter contato.');
-    }
-  };
+  const open = (contact: NucleationContact) => navigate(contactPath(contact, contacts));
 
   const columns: Column<NucleationContact>[] = [
-    {
-      header: 'Nome',
-      render: (c) => (
-        <div>
-          <p className="font-black text-zinc-900 text-sm">{c.name}</p>
-          <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-widest flex items-center gap-1.5">
-            {c.attemptsCount || 0} {c.attemptsCount === 1 ? 'tentativa' : 'tentativas'}
-            {c.coupleId && (
-              <span className="inline-flex items-center gap-1 text-rose-500">
-                <Heart className="w-3 h-3" /> Encontro de Noivos
-              </span>
-            )}
-          </p>
-        </div>
-      ),
-    },
-    {
-      header: 'Telefones',
-      render: (c) => (
-        <div className="flex flex-col gap-1">
-          {c.phone1 && (
-            <a href={`tel:${c.phone1}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline">
-              <Phone className="w-3 h-3" /> {c.phone1}
-            </a>
-          )}
-          {c.phone2 && (
-            <a href={`tel:${c.phone2}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline">
-              <Phone className="w-3 h-3" /> {c.phone2}
-            </a>
-          )}
-        </div>
-      ),
-    },
-    {
-      header: 'Status',
-      render: (c) => <Badge color={STATUS_COLOR[c.status] || 'default'}>{c.status}</Badge>,
-    },
-    {
-      header: 'Ações',
-      render: (c) => (
-        <div className="flex flex-wrap gap-1.5 sm:justify-end">
-          <Button variant="outline" size="xs" onClick={(e) => { e.stopPropagation(); openDetail(c); }}>Detalhes</Button>
-          {canDelete && (
-            <Button variant="danger" size="xs" onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}>Excluir</Button>
-          )}
-        </div>
-      ),
-    },
+    { header: 'Contato', render: contact => <div className="min-w-0">
+      <p className="text-xs font-medium text-slate-800 break-words">{contact.name}</p>
+      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
+        <span>{contact.attemptsCount || 0} {contact.attemptsCount === 1 ? 'tentativa' : 'tentativas'}</span>
+        {contact.coupleId && <span className="inline-flex items-center gap-1 text-rose-600"><Heart size={10} />Encontro de Noivos</span>}
+      </p></div> },
+    { header: 'Telefones', render: contact => {
+      const phones = [contact.phone1, contact.phone2].filter(Boolean);
+      return phones.length ? <ul className="space-y-1">{phones.map(phone => {
+        const url = whatsappUrl(phone, firstContactMessage(contact.name));
+        return <li key={phone} className="flex items-center gap-1.5 text-xs text-slate-700">
+          <a href={`tel:${phone.replace(/\D/g, '')}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 text-blue-700 hover:underline"><Phone size={12} />{maskPhone(phone)}</a>
+          {url && <a href={url} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} aria-label={`WhatsApp ${maskPhone(phone)}`} title="Abrir WhatsApp com mensagem pronta" className="text-emerald-600 hover:text-emerald-700"><MessageCircle size={14} /></a>}
+        </li>;
+      })}</ul> : <span className="text-xs text-slate-400">Não informado</span>;
+    } },
+    { header: 'Status', render: contact => <Badge size="sm" dot color={STATUS_COLOR[contact.status] || 'default'}>{contact.status}</Badge> },
+    { header: 'Ações', render: contact => <div className="flex items-center gap-1.5 sm:justify-end">
+      <Button variant="outline" size="xs" iconRight={<ArrowRight size={12} />} onClick={event => { event.stopPropagation(); open(contact); }}>Abrir</Button>
+      {canDelete && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${contact.name}`} onClick={event => { event.stopPropagation(); setDeleteTarget(contact); }}><Trash2 size={14} className="text-red-500" /></IconButton>}
+    </div> },
   ];
 
-  const attemptResultIcon = (result: string) => {
-    if (result === 'Sucesso') return <CheckCircle2 className="w-3.5 h-3.5" />;
-    if (result === 'Sem Sucesso') return <XCircle className="w-3.5 h-3.5" />;
-    return <Clock className="w-3.5 h-3.5" />;
-  };
+  if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando contatos…</div></PageWrapper>;
+
+  if (error && !contacts.length) return <PageWrapper><ContentCard><EmptyState icon={PhoneCall} title="Não foi possível carregar a nucleação" description="Confira a conexão e tente novamente."
+    action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
   return (
     <PageWrapper>
       <div className="space-y-4">
-        <SectionTitle
-          title="Nucleação"
-          description="Acompanhamento de contatos e conversão em MFCista."
-          icon={PhoneCall}
-          action={
-            canCreate ? (
-              <Button variant="primary" size="md" iconLeft={<Plus className="w-4 h-4" />} onClick={() => setShowNewModal(true)}>
-                Novo Contato
-              </Button>
-            ) : undefined
-          }
-        />
+        <SectionTitle title="Nucleação" icon={PhoneCall} description="Acompanhamento de contatos e conversão em MFCista."
+          action={canCreate ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button> : undefined} />
 
         <StatGrid cols={4}>
-          <StatCard title="Total de Contatos" value={stats.total} icon={PhoneCall} color="info" delay={0} />
-          <StatCard title="Em Andamento" value={stats.emAndamento} icon={Clock} color="warning" delay={0.05} />
-          <StatCard title="Convertidos" value={stats.convertidos} icon={UserPlus} color="success" delay={0.1} />
-          <StatCard title="Sem Sucesso" value={stats.semSucesso} icon={XCircle} color="danger" delay={0.15} />
+          <StatCard title="Total de contatos" value={stats.total} icon={PhoneCall} color="info" />
+          <StatCard title="Em andamento" value={stats.emAndamento} icon={Clock} color="warning" />
+          <StatCard title="Convertidos" value={stats.convertidos} icon={UserPlus} color="success" />
+          <StatCard title="Sem sucesso" value={stats.semSucesso} icon={XCircle} color="danger" />
         </StatGrid>
 
         <FilterLine>
           <FilterLineSection grow>
-            <FilterLineItem grow>
-              <FilterLineSearch value={search} onChange={setSearch} placeholder="Buscar por nome..." />
-            </FilterLineItem>
+            <FilterLineItem grow><FilterLineSearch aria-label="Buscar contato" value={search} onChange={setSearch} placeholder="Nome ou telefone…" /></FilterLineItem>
+            <FilterLineItem><FilterLineSegmented<string> value={statusFilter} onChange={setStatusFilter}
+              options={[{ value: 'Todos', label: 'Todos' }, { value: 'Pendente', label: 'Pendentes' }, { value: 'Em Andamento', label: 'Em andamento' }, { value: 'Convertido', label: 'Convertidos' }]} /></FilterLineItem>
           </FilterLineSection>
           <FilterLineSection align="right">
-            <FilterLineSegmented<string>
-              value={statusFilter}
-              onChange={setStatusFilter}
-              options={[
-                { value: 'Todos', label: 'Todos' },
-                { value: 'Pendente', label: 'Pendentes' },
-                { value: 'Em Andamento', label: 'Em Andamento' },
-                { value: 'Convertido', label: 'Convertidos' },
-              ]}
-              size="sm"
-            />
+            <span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'contato' : 'contatos'}</span>
+            {hasFilter && <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatusFilter('Todos'); }}>Limpar filtros</Button>}
           </FilterLineSection>
         </FilterLine>
 
         <ContentCard padding="none">
-          <GridTable
-            columns={columns}
-            data={paginatedData}
-            keyExtractor={(c) => c.id}
-            onRowClick={openDetail}
-            noDesktopCard
-            emptyMessage={
-              <EmptyState icon={PhoneCall} title="Nenhum contato encontrado" description="Cadastre um novo contato para iniciar o acompanhamento de nucleação."
-                action={canCreate ? <Button variant="primary" size="sm" onClick={() => setShowNewModal(true)}>Novo Contato</Button> : undefined} />
-            }
-            pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }}
-          />
+          <GridTable columns={columns} data={paginatedData} keyExtractor={contact => contact.id} onRowClick={open} noDesktopCard
+            emptyMessage={<EmptyState icon={PhoneCall} title="Nenhum contato encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Casais confirmados no Encontro de Noivos podem ser enviados para cá.'}
+              action={!hasFilter && canCreate ? <Button size="sm" onClick={() => setShowNewModal(true)}>Novo contato</Button> : undefined} />}
+            pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
         </ContentCard>
       </div>
 
-      {/* Modal: novo contato */}
-      <Modal isOpen={showNewModal} onClose={() => setShowNewModal(false)} title="Novo Contato de Nucleação" size="sm">
-        <div className="space-y-4">
-          <Input
-            label="Nome"
-            value={newContact.name}
-            onChange={(e) => setNewContact(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Nome do casal ou contato"
-          />
-          <Input
-            label="Telefone 1"
-            value={newContact.phone1}
-            onChange={(e) => setNewContact(prev => ({ ...prev, phone1: e.target.value }))}
-            placeholder="(00) 00000-0000"
-          />
-          <Input
-            label="Telefone 2"
-            value={newContact.phone2}
-            onChange={(e) => setNewContact(prev => ({ ...prev, phone2: e.target.value }))}
-            placeholder="(00) 00000-0000"
-          />
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setShowNewModal(false)}>Cancelar</Button>
-          <Button variant="primary" onClick={handleCreate} loading={saving}>Criar Contato</Button>
-        </ModalFooter>
-      </Modal>
+      <NucleationContactModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} onCreated={created => setContacts(prev => [created, ...prev])} />
 
-      {/* Modal: detalhe do contato */}
-      <Modal
-        isOpen={!!selectedContact}
-        onClose={() => setSelectedContact(null)}
-        title={selectedContact?.name || 'Contato'}
-        size="lg"
-      >
-        {selectedContact && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Badge color={STATUS_COLOR[selectedContact.status] || 'default'}>{selectedContact.status}</Badge>
-                {selectedContact.coupleId && (
-                  <Badge color="purple" icon={<Heart className="w-3 h-3" />}>Encontro de Noivos</Badge>
-                )}
-              </div>
-              {canEdit && selectedContact.status !== 'Convertido' && (
-                <Button variant="success" size="sm" iconLeft={<UserPlus className="w-4 h-4" />} onClick={() => setConvertTarget(selectedContact)}>
-                  Converter em MFCista
-                </Button>
-              )}
-            </div>
-
-            <div className="flex gap-4">
-              {selectedContact.phone1 && (
-                <a href={`tel:${selectedContact.phone1}`} className="flex-1 flex items-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-semibold hover:bg-blue-100 transition-colors">
-                  <Phone className="w-4 h-4" /> {selectedContact.phone1}
-                </a>
-              )}
-              {selectedContact.phone2 && (
-                <a href={`tel:${selectedContact.phone2}`} className="flex-1 flex items-center gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-sm font-semibold hover:bg-blue-100 transition-colors">
-                  <Phone className="w-4 h-4" /> {selectedContact.phone2}
-                </a>
-              )}
-            </div>
-
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3">Tentativas de Contato</h4>
-              <div className="space-y-2 max-h-56 overflow-y-auto">
-                {(selectedContact.attempts || []).length === 0 && (
-                  <p className="text-sm text-zinc-400 italic">Nenhuma tentativa registrada ainda.</p>
-                )}
-                {(selectedContact.attempts || []).map((a: NucleationAttempt) => {
-                  const user = users.find(u => u.id === a.contactedBy);
-                  return (
-                    <div key={a.id} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 border border-zinc-200">
-                      <Badge color={RESULT_COLOR[a.result] || 'default'} icon={attemptResultIcon(a.result)}>
-                        {a.result}
-                      </Badge>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-zinc-700">{a.scheduledDate || 'Sem data'} {user ? `· ${user.name}` : ''}</p>
-                        {a.notes && <p className="text-[11px] text-zinc-400">{a.notes}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {canEdit && selectedContact.status !== 'Convertido' && (
-              <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Registrar Nova Tentativa</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <DatePicker
-                    label="Data"
-                    value={newAttempt.scheduledDate}
-                    onChange={(v) => setNewAttempt(prev => ({ ...prev, scheduledDate: v || '' }))}
-                  />
-                  <Select
-                    label="Responsável"
-                    value={newAttempt.contactedBy}
-                    onChange={(e) => setNewAttempt(prev => ({ ...prev, contactedBy: e.target.value }))}
-                    options={users.map(u => ({ value: u.id, label: u.name }))}
-                    placeholder="Selecione"
-                  />
-                </div>
-                <Select
-                  label="Resultado"
-                  value={newAttempt.result}
-                  onChange={(e) => setNewAttempt(prev => ({ ...prev, result: e.target.value }))}
-                  options={[
-                    { value: 'Agendado', label: 'Agendado' },
-                    { value: 'Sucesso', label: 'Sucesso' },
-                    { value: 'Sem Sucesso', label: 'Sem Sucesso' },
-                    { value: 'Reagendado', label: 'Reagendado' },
-                  ]}
-                />
-                <Input
-                  label="Observação"
-                  value={newAttempt.notes}
-                  onChange={(e) => setNewAttempt(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Detalhes da conversa..."
-                />
-                <Button variant="primary" size="sm" fullWidth onClick={handleRegisterAttempt}>
-                  Registrar Tentativa
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-
-      <ConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleConfirmDelete}
-        title="Excluir Contato"
-        message={`Tem certeza que deseja excluir o contato de ${deleteTarget?.name}?`}
-        confirmLabel="Sim, Excluir"
-        variant="danger"
-      />
-
-      <ConfirmModal
-        isOpen={!!convertTarget}
-        onClose={() => setConvertTarget(null)}
-        onConfirm={handleConvert}
-        title="Converter em MFCista"
-        message={`${convertTarget?.name} será cadastrado como MFCista (sem equipe vinculada). Deseja continuar?`}
-        confirmLabel="Sim, Converter"
-        variant="danger"
-      />
+      <ConfirmModal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleting}
+        title="Excluir contato?" message={`O contato de ${deleteTarget?.name} e o histórico de tentativas serão excluídos. Esta ação não pode ser desfeita.`} confirmLabel="Excluir contato" variant="danger" />
     </PageWrapper>
   );
 };

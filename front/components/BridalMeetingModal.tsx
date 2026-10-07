@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../api';
 import { BridalMeeting } from '../types';
-import { Button, DatePicker, Input, Modal, ModalFooter } from './ui';
+import { Button, DatePicker, Input, Modal, ModalFooter, Switch } from './ui';
+import { CLOSE_AFTER_DAYS } from '../utils/meetingStatus';
 
 interface BridalMeetingModalProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface BridalMeetingModalProps {
   onSaved: (meeting: BridalMeeting, mode: 'created' | 'updated') => void;
 }
 
-const blank = { name: '', date: '', startTime: '', endTime: '', location: '', pixKey: '' };
+const blank = { name: '', date: '', startTime: '', endTime: '', location: '', pixKey: '', isActive: true };
 
 export const BridalMeetingModal: React.FC<BridalMeetingModalProps> = ({ isOpen, meeting, onClose, onSaved }) => {
   const [form, setForm] = useState(blank);
@@ -23,10 +24,10 @@ export const BridalMeetingModal: React.FC<BridalMeetingModalProps> = ({ isOpen, 
   useEffect(() => {
     if (!isOpen) return;
     setTouched(false);
-    setForm(meeting ? { name: meeting.name, date: meeting.date || '', startTime: meeting.startTime || '', endTime: meeting.endTime || '', location: meeting.location || '', pixKey: meeting.pixKey || '' } : blank);
+    setForm(meeting ? { name: meeting.name, date: meeting.date || '', startTime: meeting.startTime || '', endTime: meeting.endTime || '', location: meeting.location || '', pixKey: meeting.pixKey || '', isActive: meeting.isActive } : blank);
   }, [isOpen, meeting]);
 
-  const set = (field: keyof typeof blank, value: string) => setForm(prev => ({ ...prev, [field]: value }));
+  const set = (field: keyof typeof blank, value: string | boolean) => setForm(prev => ({ ...prev, [field]: value }));
   const errors = {
     name: form.name.trim().length < 3 ? 'Informe o nome do encontro (mínimo 3 letras).' : '',
     date: !form.date ? 'Informe a data do encontro.' : '',
@@ -71,6 +72,13 @@ export const BridalMeetingModal: React.FC<BridalMeetingModalProps> = ({ isOpen, 
       {err(errors.time)}
       <Input label="Local" value={form.location} onChange={event => set('location', event.target.value)} placeholder="Nome do local" />
       <Input label="Chave Pix" value={form.pixKey} onChange={event => set('pixKey', event.target.value)} placeholder="Chave Pix para pagamento" />
+      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+        <Switch checked={form.isActive} onCheckedChange={value => set('isActive', value)} size="sm" />
+        <span>
+          <span className="block text-xs font-semibold text-slate-800">Encontro aberto</span>
+          <span className="block text-[11px] text-slate-500">Desligue para encerrar agora. Ele também fecha sozinho {CLOSE_AFTER_DAYS} dias depois da data.</span>
+        </span>
+      </label>
     </div>
   </Modal>;
 };

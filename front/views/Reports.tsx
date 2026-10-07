@@ -7,6 +7,7 @@ import {
   Select, Button, Badge, EmptyState, Tabs, GridTable, usePagination,
 } from '../components/ui';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 
 interface TeamResult { id: string; name: string; paid: number; pending: number; total: number; }
 interface Summary {
@@ -31,6 +32,7 @@ const tabs = [
   { id: 'geral', label: 'Visão geral', icon: BarChart3 },
   { id: 'equipes', label: 'Equipes', icon: Table2 },
 ] as const;
+const tabIds = tabs.map(tab => tab.id);
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 const percent = (team: TeamResult) => team.total > 0 ? Math.round((team.paid / team.total) * 100) : null;
@@ -45,7 +47,7 @@ const Reports: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [activeTab, setActiveTab] = useState<typeof tabs[number]['id']>('geral');
+  const [activeTab, setActiveTab] = useUrlTab(tabIds, 'geral');
   const [teamFilter, setTeamFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');

@@ -14,6 +14,7 @@ import { maskPhone } from '../utils/masks';
 import { dateLabel } from '../utils/dates';
 import { whatsappUrl } from '../utils/whatsapp';
 import { ageDistribution } from '../utils/ageRanges';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 import { BIRTHDAY_GROUP_LABEL, BirthdayGroup, birthdayGroup, birthdayMessage, weddingMessage } from '../utils/birthdayMessages';
 
 interface Summary {
@@ -36,6 +37,7 @@ const tabs = [
   { id: 'aniversarios', label: 'Aniversários', icon: Cake },
   { id: 'financeiro', label: 'Financeiro', icon: CircleDollarSign },
 ] as const;
+const tabIds = tabs.map(tab => tab.id);
 
 const emptySummary: Summary = { stats: {}, barData: [], trendData: [] };
 
@@ -44,7 +46,7 @@ const Dashboard: React.FC = () => {
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
   const [year, setYear] = useState(String(now.getFullYear()));
-  const [activeTab, setActiveTab] = useState<typeof tabs[number]['id']>('geral');
+  const [activeTab, setActiveTab] = useUrlTab(tabIds, 'geral');
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [when, setWhen] = useState('month');
   const [teams, setTeams] = useState<BaseTeam[]>([]);

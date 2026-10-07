@@ -74,6 +74,7 @@ import { monthlyAmountForMember, monthlyContributors } from '../utils/paymentRul
 import { isPaidPayment, matchesReference, receivedInPeriod, monthlySettlement, formatPaymentDate, localDateToday, paidLate } from '../utils/paymentAccounting';
 import toast from 'react-hot-toast';
 import { FamilyPaymentModal } from '../components/FamilyPaymentModal';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 import type { BillingUnit } from '../utils/billingUnits';
 
 interface MyTeamViewProps {
@@ -97,7 +98,7 @@ const shortMonths = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out'
 
 const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabId>('familias');
+  const [activeTab, setActiveTab] = useUrlTab(TABS.map(tab => tab.id), 'familias');
   const [showFamilyModal, setShowFamilyModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedFamily, setSelectedFamily] = useState<any>(null);

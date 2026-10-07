@@ -66,3 +66,19 @@ test('faixas etárias do perfil cobrem todas as idades sem sobreposição', () =
   assert.deepEqual(rows.map(row => row.value), [2, 2, 2, 2, 2, 2, 2]);
   assert.equal(unknown, 1);
 });
+
+test('encontro fecha sozinho 7 dias depois da data ou quando encerrado à mão', () => {
+  const { meetingStatus, CLOSE_AFTER_DAYS } = loadSource('utils/meetingStatus.ts');
+  const at = (y, m, d) => new Date(y, m - 1, d, 9);
+  const meeting = { date: '2026-09-13', isActive: true };
+  assert.equal(CLOSE_AFTER_DAYS, 7);
+  assert.equal(meetingStatus(meeting, at(2026, 9, 1)).closed, false);
+  assert.equal(meetingStatus(meeting, at(2026, 9, 13)).closed, false);
+  const after = meetingStatus(meeting, at(2026, 9, 17));
+  assert.equal(after.closed, false); assert.equal(after.daysLeft, 3);
+  assert.equal(meetingStatus(meeting, at(2026, 9, 20)).closed, false);
+  const auto = meetingStatus(meeting, at(2026, 9, 21));
+  assert.equal(auto.closed, true); assert.equal(auto.reason, 'auto');
+  const manual = meetingStatus({ date: '2026-12-01', isActive: false }, at(2026, 9, 1));
+  assert.equal(manual.closed, true); assert.equal(manual.reason, 'manual');
+});

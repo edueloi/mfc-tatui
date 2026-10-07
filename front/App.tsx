@@ -21,6 +21,7 @@ import EncontroNoivos from './views/EncontroNoivos';
 import BridalCoupleDetail from './views/BridalCoupleDetail';
 import BridalPublicForm from './views/BridalPublicForm';
 import Nucleacao from './views/Nucleacao';
+import NucleationDetail from './views/NucleationDetail';
 import { User as UserType } from './types';
 
 const App: React.FC = () => {
@@ -105,8 +106,10 @@ const App: React.FC = () => {
               <Route path="encontro-noivos/encontro/:meetingSlug" element={<EncontroNoivos />} />
               <Route path="encontro-noivos/:coupleSlug" element={<BridalCoupleDetail />} />
               <Route path="nucleacao" element={<Nucleacao />} />
+              <Route path="nucleacao/:contactSlug" element={<NucleationDetail />} />
               <Route path="usuarios" element={<UserManagement />} />
-              <Route path="configuracoes" element={<SettingsView />} />
+              <Route path="configuracoes" element={<Navigate to="/configuracoes/acessos" replace />} />
+              <Route path="configuracoes/:tab" element={<SettingsView />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           )}

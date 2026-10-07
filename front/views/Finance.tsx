@@ -13,6 +13,7 @@ import { monthlyContributors } from '../utils/paymentRules';
 import { isPaidPayment, matchesReference, receivedInPeriod, paidLate, formatPaymentDate, monthlySettlement } from '../utils/paymentAccounting';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
 import { findTeamByParam, teamPath } from '../utils/teamSlug';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 
 interface FinanceViewProps { cityId: string; userId: string; }
 
@@ -123,7 +124,7 @@ interface CommonProps { teams: BaseTeam[]; members: Member[]; payments: Payment[
 
 const TeamsOverview: React.FC<CommonProps & { onOpen: (team: BaseTeam) => void }> = ({ teams, members, payments, period, monthlyAmount, periodLabel, selector, onOpen }) => {
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<'equipes' | 'recebimentos'>('equipes');
+  const [tab, setTab] = useUrlTab(['equipes', 'recebimentos'] as const, 'equipes');
   const rows = useMemo(() => teams.map(team => ({ team, ...teamSummary(team, members, payments, period, monthlyAmount) })), [teams, members, payments, period, monthlyAmount]);
   const query = normalizeDirectoryText(search);
   const filtered = rows.filter(row => !query || normalizeDirectoryText(`${row.team.name} ${row.team.city}`).includes(query)).sort((a, b) => a.team.name.localeCompare(b.team.name, 'pt-BR'));
@@ -174,7 +175,7 @@ const TeamsOverview: React.FC<CommonProps & { onOpen: (team: BaseTeam) => void }
 const TeamTreasury: React.FC<CommonProps & { team: BaseTeam; userId: string; onBack: () => void; onSaved: (created: Payment[]) => void; reload: () => void }> = ({
   team, userId, members, payments, period, monthlyAmount, periodLabel, selector, onBack, onSaved, reload,
 }) => {
-  const [tab, setTab] = useState<'familias' | 'recebimentos'>('familias');
+  const [tab, setTab] = useUrlTab(['familias', 'recebimentos'] as const, 'familias');
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [payUnit, setPayUnit] = useState<BillingUnit | null>(null);

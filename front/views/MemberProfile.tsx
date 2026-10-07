@@ -6,6 +6,7 @@ import { Member, BaseTeam } from '../types';
 import { PageWrapper, ContentCard, PanelCard, Button, Badge, EmptyState, DetailField, Tabs } from '../components/ui';
 import { maskCPF, maskPhone, maskCEP } from '../utils/masks';
 import { dateLabel, yearsSince } from '../utils/dates';
+import { useUrlTab } from '../src/hooks/useUrlTab';
 
 const tabs = [
   { id: 'pessoal', label: 'Perfil', icon: User },
@@ -15,6 +16,7 @@ const tabs = [
   { id: 'historico', label: 'Cargos', icon: Award },
   { id: 'registro', label: 'Cadastro', icon: ClipboardList },
 ] as const;
+const tabIds = tabs.map(tab => tab.id);
 
 const fieldsClass = 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6';
 
@@ -26,14 +28,13 @@ const MemberProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [activeTab, setActiveTab] = useState<typeof tabs[number]['id']>('pessoal');
+  const [activeTab, setActiveTab] = useUrlTab(tabIds, 'pessoal');
 
   useEffect(() => {
     let cancelled = false;
     let requestId = 0;
     setLoading(true);
     setMember(null);
-    setActiveTab('pessoal');
     const load = async () => {
       const currentRequest = ++requestId;
       try {

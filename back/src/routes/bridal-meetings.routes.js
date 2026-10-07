@@ -93,6 +93,9 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Nome e data são obrigatórios.' });
     }
 
+    const existing = await db.prepare('SELECT is_active FROM bridal_meetings WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Encontro não encontrado.' });
+
     await db.prepare(`
       UPDATE bridal_meetings SET
         city_id = @cityId, name = @name, date = @date, start_time = @startTime,
@@ -108,7 +111,7 @@ router.put('/:id', async (req, res) => {
       endTime: data.endTime || '',
       location: data.location || '',
       pixKey: data.pixKey || '',
-      isActive: toInt(data.isActive !== false),
+      isActive: data.isActive === undefined ? toInt(existing.is_active) : toInt(data.isActive !== false),
       updatedAt: nowIso()
     });
 

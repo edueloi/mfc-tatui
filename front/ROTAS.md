@@ -23,7 +23,9 @@ O sistema agora utiliza **React Router DOM** para gerenciar a navegação com UR
 | `/encontro-noivos/encontro/:meetingSlug` | Casais de um encontro (ex.: `/encontro-noivos/encontro/encontro-agosto-2026`); `sem-encontro` lista as fichas sem turma | EncontroNoivos | conforme permissões do módulo |
 | `/encontro-noivos/:coupleSlug` | Ficha de um casal (ex.: `/encontro-noivos/joao-e-maria`) | BridalCoupleDetail | conforme permissões do módulo |
 | `/usuarios` | Usuários do Sistema | UserManagement | ADMIN |
-| `/configuracoes` | Configurações do Sistema | Settings | ADMIN |
+| `/configuracoes/:aba` | Ajustes: `acessos`, `unidades` ou `financeiro` (`/configuracoes` redireciona para `acessos`; use `?perfil=` para escolher o perfil) | Settings | ADMIN |
+| `/nucleacao` | Contatos de nucleação | Nucleacao | conforme permissões do módulo |
+| `/nucleacao/:contactSlug` | Contato (ex.: `/nucleacao/lucas-ferreira-amanda-ribeiro`) | NucleationDetail | conforme permissões do módulo |
 
 ### Parâmetros de URL
 
@@ -75,3 +77,7 @@ O acesso às rotas é controlado pelo componente `Layout`, que filtra os itens d
 O sistema é totalmente responsivo:
 - **Desktop** (>= 1024px): Sidebar sempre visível
 - **Tablet/Mobile** (< 1024px): Sidebar em modo overlay, acionada por botão menu
+
+### Aba na URL
+
+Telas com abas guardam a aba em `?aba=<id>` (ex.: `/mfcistas/<id>?aba=saude`, `/?aba=aniversarios`, `/financeiro/<equipe>?aba=recebimentos`). A aba padrão não aparece na URL.
