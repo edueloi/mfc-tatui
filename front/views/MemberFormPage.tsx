@@ -50,7 +50,7 @@ const MemberFormPage: React.FC = () => {
       phone: unmask(data.phone || ''),
       emergencyPhone: unmask(data.emergencyPhone || ''),
       zip: unmask(data.zip || ''),
-      movementRoles: [],
+      movementRoles: data.movementRoles || [],
       updatedAt: new Date().toISOString(),
     };
 
