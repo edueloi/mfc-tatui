@@ -250,6 +250,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               className
             )}
             {...props}
+            // O recuo vai inline porque o CSS base de .ds-input ganha de pl-9 e o ícone ficava por cima do texto.
+            style={{ ...(iconLeft ? { paddingLeft: '2.5rem' } : null), ...(iconRight ? { paddingRight: '3.25rem' } : null), ...props.style }}
           >
             {placeholder && (
               <option value="" disabled>

@@ -13,6 +13,7 @@ import {
 import { maskPhone } from '../utils/masks';
 import { dateLabel } from '../utils/dates';
 import { whatsappUrl } from '../utils/whatsapp';
+import { ageDistribution } from '../utils/ageRanges';
 import { BIRTHDAY_GROUP_LABEL, BirthdayGroup, birthdayGroup, birthdayMessage, weddingMessage } from '../utils/birthdayMessages';
 
 interface Summary {
@@ -143,12 +144,12 @@ const Dashboard: React.FC = () => {
   if (error && !members.length) return <PageWrapper><ContentCard><EmptyState icon={BarChart3} title="Não foi possível carregar o painel" description="Confira a conexão e tente novamente."
     action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
-  const ageRows = [
-    { label: 'Até 12 anos', value: stats.children || 0 }, { label: '13 a 18 anos', value: stats.youth || 0 },
-    { label: '19 a 59 anos', value: stats.adult || 0 }, { label: '60 anos ou mais', value: stats.elderly || 0 },
-  ];
-  const ageTotal = ageRows.reduce((sum, row) => sum + row.value, 0) || 1;
-  const sexTotal = (stats.male || 0) + (stats.female || 0) || 1;
+  const profileMembers = members.filter(inScope);
+  const { rows: ageRows, unknown: ageUnknown } = ageDistribution(profileMembers);
+  const ageTotal = Math.max(1, ...ageRows.map(row => row.value));
+  const female = profileMembers.filter(member => member.gender === 'Feminino').length;
+  const male = profileMembers.filter(member => member.gender === 'Masculino').length;
+  const sexTotal = female + male || 1;
   const celebrationTabs = tabs.map(tab => tab.id === 'aniversarios' && celebrations.length ? { ...tab, label: `Aniversários (${celebrations.length})` } : tab);
 
   return (
@@ -187,7 +188,7 @@ const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               <PanelCard title="Adimplência por equipe" description={`Quem pagou a mensalidade de ${periodLabel}.`}>
                 {teamResults.length ? <div className="h-64 min-w-0">
-                  <ResponsiveContainer width="100%" height="100%"><BarChart data={teamResults} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={teamResults} layout="vertical" margin={{ left: 8, right: 16 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                     <XAxis type="number" domain={[0, 100]} unit="%" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="name" width={92} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
@@ -196,18 +197,19 @@ const Dashboard: React.FC = () => {
                   </BarChart></ResponsiveContainer>
                 </div> : <EmptyState icon={Layers} title="Sem equipes com cobrança" description="Nenhuma equipe tem contribuintes neste período." />}
               </PanelCard>
-              <PanelCard title="Perfil dos MFCistas" description="Todos os cadastrados.">
+              <PanelCard title="Perfil dos MFCistas" description={`${profileMembers.length} cadastrados${teamIds.length ? ' nas equipes filtradas' : ''}.`} className="self-start">
                 <div className="space-y-4">
                   <div>
-                    <div className="mb-1 flex justify-between text-xs text-slate-600"><span>Mulheres · {stats.female || 0}</span><span>Homens · {stats.male || 0}</span></div>
-                    <div className="flex h-2 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`${stats.female || 0} mulheres e ${stats.male || 0} homens`}>
-                      <div className="bg-pink-400" style={{ width: `${((stats.female || 0) / sexTotal) * 100}%` }} /><div className="bg-blue-500" style={{ width: `${((stats.male || 0) / sexTotal) * 100}%` }} />
+                    <div className="mb-1 flex justify-between text-xs text-slate-600"><span>Mulheres · {female}</span><span>Homens · {male}</span></div>
+                    <div className="flex h-2 overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`${female} mulheres e ${male} homens`}>
+                      <div className="bg-pink-400" style={{ width: `${(female / sexTotal) * 100}%` }} /><div className="bg-blue-500" style={{ width: `${(male / sexTotal) * 100}%` }} />
                     </div>
                   </div>
                   <ul className="space-y-2.5">{ageRows.map(row => <li key={row.label}>
                     <div className="mb-1 flex justify-between text-xs text-slate-600"><span>{row.label}</span><span className="tabular-nums">{row.value}</span></div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-violet-500" style={{ width: `${(row.value / ageTotal) * 100}%` }} /></div>
                   </li>)}</ul>
+                  {ageUnknown > 0 && <p className="text-[11px] text-slate-500">{ageUnknown} sem data de nascimento não entram nas faixas.</p>}
                 </div>
               </PanelCard>
             </div>
@@ -259,7 +261,7 @@ const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               <PanelCard title="Arrecadação dos últimos 6 meses" description="Valores recebidos em cada mês.">
                 <div className="h-60 min-w-0">
-                  <ResponsiveContainer width="100%" height="100%"><BarChart data={trend}>
+                  <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={trend}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />

@@ -93,7 +93,7 @@ const PartnerBlock = ({
       onChange={(e) => onChange('name', e.target.value)}
       placeholder="Nome completo"
     />
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3">
       <DatePicker
         label="Data de Nascimento"
         value={partner.dob}
@@ -330,7 +330,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
         {currentStep === 'casal' && (
           <div className="space-y-5">
             {mode === 'internal' && (
-              <div className="max-w-sm">
+              <div className="max-w-xl">
                 <Select
                   label="Encontro"
                   value={eventId || ''}

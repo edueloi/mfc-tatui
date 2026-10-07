@@ -139,7 +139,7 @@ const Reports: React.FC = () => {
           {activeTab === 'geral' && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <PanelCard title="Adimplência por equipe" description={`Percentual de contribuintes que pagaram em ${periodLabel}.`} className="lg:col-span-2">
               {chartTeams.length ? <div className="h-72 min-w-0">
-                <ResponsiveContainer width="100%" height="100%"><BarChart data={chartTeams}>
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={chartTeams}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} interval={0} />
                   <YAxis domain={[0, 100]} unit="%" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
@@ -152,7 +152,7 @@ const Reports: React.FC = () => {
             </PanelCard>
             <PanelCard title="Arrecadação dos últimos 6 meses" description="Valores recebidos em cada mês, pela data do recebimento.">
               <div className="h-64 min-w-0">
-                <ResponsiveContainer width="100%" height="100%"><BarChart data={trend}>
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={trend}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
@@ -163,7 +163,7 @@ const Reports: React.FC = () => {
             </PanelCard>
             <PanelCard title="Membros por sexo" description="Todos os MFCistas cadastrados.">
               {sexPie.length ? <div className="h-64 min-w-0">
-                <ResponsiveContainer width="100%" height="100%"><PieChart>
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><PieChart>
                   <Pie data={sexPie} dataKey="value" nameKey="name" innerRadius={55} outerRadius={75} paddingAngle={3}>
                     {sexPie.map((item, index) => <Cell key={item.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
                   </Pie>
@@ -173,7 +173,7 @@ const Reports: React.FC = () => {
             </PanelCard>
             <PanelCard title="Faixa etária" description="Todos os MFCistas cadastrados." className="lg:col-span-2">
               <div className="h-56 min-w-0">
-                <ResponsiveContainer width="100%" height="100%"><BarChart data={ageBars}>
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={ageBars}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />

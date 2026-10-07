@@ -56,3 +56,13 @@ test('slug de encontro e casal: nome, desempate por data/id e id antigo', () => 
   assert.equal(coupleSlug(couples[0], couples), 'joao-e-maria-abcdef12');
   assert.equal(findCouple(couples, 'joao-e-maria-zzzzzz99').id, 'zzzzzz999999');
 });
+
+test('faixas etárias do perfil cobrem todas as idades sem sobreposição', () => {
+  const { ageDistribution, AGE_RANGES } = loadSource('utils/ageRanges.ts');
+  for (let i = 1; i < AGE_RANGES.length; i++) assert.equal(AGE_RANGES[i].min, AGE_RANGES[i - 1].max + 1);
+  const born = years => { const d = new Date(); d.setFullYear(d.getFullYear() - years); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); };
+  const ages = [3, 10, 11, 17, 18, 24, 25, 34, 35, 49, 50, 60, 61, 90];
+  const { rows, unknown } = ageDistribution([...ages.map(age => ({ dob: born(age) })), { dob: '' }]);
+  assert.deepEqual(rows.map(row => row.value), [2, 2, 2, 2, 2, 2, 2]);
+  assert.equal(unknown, 1);
+});

@@ -195,7 +195,7 @@ const TeamDetail: React.FC = () => {
           {activeTab === 'resumo' && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <PanelCard title="Faixa etária" description={stats.withoutBirthDate ? `${stats.withoutBirthDate} sem data de nascimento não entram no gráfico.` : 'Distribuição por idade dos membros.'}>
               {stats.ages.some(band => band.value > 0) ? <div className="h-64 min-w-0">
-                <ResponsiveContainer width="100%" height="100%"><PieChart>
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><PieChart>
                   <Pie data={stats.ages.filter(band => band.value > 0)} innerRadius={55} outerRadius={75} paddingAngle={3} dataKey="value" nameKey="name">
                     {stats.ages.filter(band => band.value > 0).map(band => <Cell key={band.name} fill={COLORS[stats.ages.indexOf(band) % COLORS.length]} />)}
                   </Pie>
@@ -205,7 +205,7 @@ const TeamDetail: React.FC = () => {
             </PanelCard>
             <PanelCard title="Aniversariantes por mês" description="Quantidade de membros que fazem aniversário em cada mês.">
               <div className="h-64 min-w-0">
-                <ResponsiveContainer width="100%" height="100%"><BarChart data={stats.birthdaysByMonth}>
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={stats.birthdaysByMonth}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
