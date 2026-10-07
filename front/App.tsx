@@ -100,6 +100,7 @@ const App: React.FC = () => {
               <Route path="financeiro" element={<FinanceView cityId={currentUser.cityId} userId={currentUser.id} />} />
               <Route path="financeiro/:teamSlug" element={<FinanceView cityId={currentUser.cityId} userId={currentUser.id} />} />
               <Route path="livro-caixa" element={<GeneralLedger />} />
+              <Route path="livro-caixa/:bookSlug" element={<GeneralLedger />} />
               <Route path="lancamentos" element={<DailyEntries />} />
               <Route path="encontro-noivos" element={<EncontroNoivos />} />
               <Route path="encontro-noivos/casais" element={<EncontroNoivos />} />

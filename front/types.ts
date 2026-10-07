@@ -38,6 +38,7 @@ export interface User {
   cityId: string;
   role: UserRoleType;
   teamId?: string;
+  active?: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -18,6 +18,7 @@ O sistema agora utiliza **React Router DOM** para gerenciar a navegação com UR
 | `/financeiro` | Tesouraria Equipes | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/financeiro/:teamSlug` | Tesouraria de uma equipe (ex.: `/financeiro/equipe-sao-jose?mes=7&ano=2026`) | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/livro-caixa` | Livro Caixa | GeneralLedger | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
+| `/livro-caixa/:bookSlug` | Livro caixa de um exercício (ex.: `/livro-caixa/livro-caixa-da-unidade?aba=balancete`; abas `lancamentos`, `balancete`, `grafico`) | GeneralLedger | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/encontro-noivos` | Encontros de noivos (cards) | EncontroNoivos | conforme permissões do módulo |
 | `/encontro-noivos/casais` | Todos os casais | EncontroNoivos | conforme permissões do módulo |
 | `/encontro-noivos/encontro/:meetingSlug` | Casais de um encontro (ex.: `/encontro-noivos/encontro/encontro-agosto-2026`); `sem-encontro` lista as fichas sem turma | EncontroNoivos | conforme permissões do módulo |

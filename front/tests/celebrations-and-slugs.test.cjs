@@ -82,3 +82,20 @@ test('encontro fecha sozinho 7 dias depois da data ou quando encerrado à mão',
   const manual = meetingStatus({ date: '2026-12-01', isActive: false }, at(2026, 9, 1));
   assert.equal(manual.closed, true); assert.equal(manual.reason, 'manual');
 });
+
+test('livro caixa: saldo, totais por mês e balancete vêm dos lançamentos', () => {
+  const { summarize, monthlyTotals, balanceSheet, bookSlug, findBook } = loadSource('utils/ledger.ts');
+  const entry = (type, amount, date, category) => ({ id: type + amount + date, teamId: null, entityId: 'b', type, amount, date, category, description: '', createdBy: null });
+  const entries = [entry('IN', 1200, '2026-01-10', 'Mensalidades'), entry('IN', 300, '2026-02-20', 'Doações'), entry('OUT', 480, '2026-02-12', 'Material'), entry('IN', 100, '2026-02-21', 'Doações')];
+  const totals = summarize(entries, 500);
+  assert.deepEqual([totals.income, totals.expenses, totals.balance], [1600, 480, 1620]);
+  const monthly = monthlyTotals(entries);
+  assert.equal(monthly.income[0], 1200); assert.equal(monthly.income[1], 400); assert.equal(monthly.expenses[1], 480); assert.equal(monthly.income[5], 0);
+  const sheet = balanceSheet(entries);
+  assert.deepEqual(sheet.income.map(row => [row.category, row.total]), [['Doações', 400], ['Mensalidades', 1200]]);
+  assert.equal(sheet.expenses[0].months[1], 480);
+  const books = [{ id: 'a', name: 'Livro Caixa', year: 2025 }, { id: 'b', name: 'Livro Caixa', year: 2026 }];
+  assert.equal(bookSlug(books[1], books), 'livro-caixa-2026');
+  assert.equal(findBook(books, 'livro-caixa-2025').id, 'a');
+  assert.equal(findBook(books, 'b').id, 'b');
+});

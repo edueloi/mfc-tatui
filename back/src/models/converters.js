@@ -18,6 +18,7 @@ const rowToUser = (row) => ({
   cityId: row.city_id,
   role: row.role,
   teamId: row.team_id || undefined,
+  active: row.active === undefined || row.active === null ? true : Boolean(Number(row.active)),
   createdAt: row.created_at,
   updatedAt: row.updated_at
 });
@@ -125,6 +126,7 @@ const rowToPayment = (row) => ({
 const rowToLedger = (row) => ({
   id: row.id,
   teamId: row.team_id || null,
+  entityId: row.entity_id || null,
   type: row.type,
   description: row.description || '',
   amount: parseFloat(row.amount) || 0,

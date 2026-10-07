@@ -1,695 +1,322 @@
-
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  Plus, 
-  ArrowLeft, 
-  Download, 
-  Printer, 
-  Calendar, 
-  User, 
-  FileText, 
-  ChevronRight,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Save,
-  X,
-  Check,
-  ChevronDown,
-  Info,
-  Layers,
-  MoreVertical,
-  Briefcase,
-  ArrowRightLeft
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import {
+  BookOpen, Plus, ArrowLeft, ArrowRight, Download, DollarSign, TrendingUp, TrendingDown, Wallet, Pencil, Trash2, Loader2, ListChecks, Table2, BarChart3,
 } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { api } from '../api';
 import { FinancialEntity } from '../types';
-import { 
-  PageWrapper, 
-  SectionTitle, 
-  StatGrid, 
-  ContentCard, 
-  Button, 
-  IconButton, 
-  Input, 
-  Select, 
-  Modal, 
-  ModalFooter 
+import {
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, PanelCard, Tabs, Button, IconButton, Badge, Select, EmptyState, ConfirmModal, GridTable, usePagination,
+  FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch, FilterLineSegmented,
 } from '../components/ui';
-import { StatCard } from '../components/ui/StatCard';
-import { cn } from '../src/lib/utils';
+import { LedgerBookModal } from '../components/LedgerBookModal';
+import { LedgerEntryModal } from '../components/LedgerEntryModal';
+import { usePermission } from '../src/hooks/usePermission';
+import { useUrlTab } from '../src/hooks/useUrlTab';
+import { dateLabel } from '../utils/dates';
+import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { LEDGER_BASE, LedgerEntry, balanceSheet, bookPath, findBook, monthNames, monthlyTotals, shortMonths, summarize } from '../utils/ledger';
+
+const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+const number = (value: number) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+const currentUserId = () => { try { return JSON.parse(localStorage.getItem('mfc.currentUser') || 'null')?.id as string | undefined; } catch { return undefined; } };
 
 const GeneralLedger: React.FC = () => {
-  const [view, setView] = useState<'list' | 'detail'>('list');
-  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
-  const [showLaunchModal, setShowLaunchModal] = useState(false);
-  const [showEntityModal, setShowEntityModal] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [entitySearch, setEntitySearch] = useState('');
-  const [entityYearFilter, setEntityYearFilter] = useState<'all' | number>('all');
-
-  const [entities, setEntities] = useState<FinancialEntity[]>([]);
-
-  useEffect(() => {
-    api.getLedgerEntities()
-      .then(setEntities)
-      .catch(() => setEntities([]));
-  }, []);
-
-  const [newEntity, setNewEntity] = useState({
-    name: '',
-    year: new Date().getFullYear(),
-    observations: '',
-    initialBalance: ''
-  });
-
-  const [launchForm, setLaunchForm] = useState({
-    type: 'Receita' as 'Receita' | 'Despesa',
-    category: '',
-    amount: '',
-    description: '',
-    months: [] as number[]
-  });
-
-  const monthNames = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-
-  const categories = {
-    Receita: [
-      { id: '1.1.1', label: 'Receitas de Vendas - Dinheiro' },
-      { id: '1.1.2', label: 'Receitas de Vendas - PIX' },
-      { id: '1.1.3', label: 'Receitas de Vendas - Cartão' },
-      { id: '1.1.4', label: 'Outros' },
-    ],
-    Despesa: [
-      { id: '2.1.1', label: 'Ajuda de Custos a Colaboradores' },
-      { id: '2.1.2', label: 'Material Acervo Literário' },
-      { id: '2.1.3', label: 'Telefone / Internet' },
-      { id: '2.1.7', label: 'INSS / DARF' },
-      { id: '2.1.11', label: 'Salário / M.O' },
-      { id: '2.1.15', label: 'Tarifa Maquininha' },
-    ]
-  };
-
-  const filteredEntities = useMemo(() => {
-    return entities
-      .filter((entity) =>
-        entity.name.toLowerCase().includes(entitySearch.toLowerCase()) ||
-        String(entity.year).includes(entitySearch)
-      )
-      .filter((entity) => (entityYearFilter === 'all' ? true : entity.year === entityYearFilter))
-      .sort((a, b) => b.year - a.year);
-  }, [entities, entitySearch, entityYearFilter]);
-
-  const listStats = useMemo(() => {
-    return filteredEntities.reduce((acc, entity) => {
-      acc.total += 1;
-      acc.balance += Number(entity.initialBalance) || 0;
-      return acc;
-    }, { total: 0, balance: 0 });
-  }, [filteredEntities]);
-
-  const notify = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const handleCreateEntity = () => {
-    if (!newEntity.name || !newEntity.initialBalance) {
-      alert("Por favor, preencha o nome e o saldo inicial.");
-      return;
-    }
-
-    api.createLedgerEntity({
-      name: newEntity.name,
-      year: newEntity.year,
-      createdBy: 'Admin',
-      observations: newEntity.observations,
-      initialBalance: parseFloat(newEntity.initialBalance)
-    })
-      .then((entity: FinancialEntity) => {
-        setEntities([entity, ...entities]);
-        setShowEntityModal(false);
-        setNewEntity({ name: '', year: new Date().getFullYear(), observations: '', initialBalance: '' });
-        notify("Novo Livro Caixa criado com sucesso!");
-      })
-      .catch(() => {
-        setShowEntityModal(false);
-      });
-  };
-
-  const toggleMonthSelection = (idx: number) => {
-    setLaunchForm(prev => ({
-      ...prev,
-      months: prev.months.includes(idx) 
-        ? prev.months.filter(m => m !== idx) 
-        : [...prev.months, idx]
-    }));
-  };
-
-  const handleLaunchSubmit = () => {
-    if (launchForm.months.length === 0 || !launchForm.amount || !launchForm.category) {
-      alert("Por favor, preencha o valor, categoria e selecione ao menos um mês.");
-      return;
-    }
-    notify(`Lançamentos de ${launchForm.type} realizados com sucesso!`);
-    setShowLaunchModal(false);
-    setLaunchForm({ type: 'Receita', category: '', amount: '', description: '', months: [] });
-  };
-
-  const selectedEntity = entities.find(e => e.id === selectedEntityId);
-  const monthlyRevenueValue = 7100;
-  const monthlyExpenseValue = 850;
-  const annualRevenueTotal = categories.Receita.length * monthlyRevenueValue * 12;
-  const annualExpenseTotal = categories.Despesa.length * monthlyExpenseValue * 12;
-  const estimatedResult = annualRevenueTotal - annualExpenseTotal + Number(selectedEntity?.initialBalance || 0);
-
-  const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-  const spreadsheetScrollRef = useRef<HTMLDivElement | null>(null);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [focusedMonthIndex, setFocusedMonthIndex] = useState<number | null>(null);
-
-  const updateScrollHints = () => {
-    const el = spreadsheetScrollRef.current;
-    if (!el) return;
-    const maxScrollLeft = Math.max(el.scrollWidth - el.clientWidth, 1);
-    setCanScrollLeft(el.scrollLeft > 8);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
-    setScrollProgress(Math.min(100, Math.max(0, (el.scrollLeft / maxScrollLeft) * 100)));
-  };
-
-  const handleLedgerHorizontalScroll = (direction: 'left' | 'right') => {
-    const el = spreadsheetScrollRef.current;
-    if (!el) return;
-    el.scrollBy({ left: direction === 'right' ? 380 : -380, behavior: 'smooth' });
-  };
-
-  const handleLedgerScrollToEdge = (direction: 'start' | 'end') => {
-    const el = spreadsheetScrollRef.current;
-    if (!el) return;
-    el.scrollTo({ left: direction === 'end' ? el.scrollWidth : 0, behavior: 'smooth' });
-  };
+  const navigate = useNavigate();
+  const { bookSlug } = useParams<{ bookSlug?: string }>();
+  const [books, setBooks] = useState<FinancialEntity[]>([]);
+  const [entries, setEntries] = useState<LedgerEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [showBookModal, setShowBookModal] = useState(false);
+  const [editingBook, setEditingBook] = useState<FinancialEntity | null>(null);
+  const [deleteBook, setDeleteBook] = useState<FinancialEntity | null>(null);
+  const [deletingBook, setDeletingBook] = useState(false);
+  const userId = currentUserId();
 
   useEffect(() => {
-    if (view !== 'detail') return;
-    const el = spreadsheetScrollRef.current;
-    if (!el) return;
-    updateScrollHints();
-    el.addEventListener('scroll', updateScrollHints);
-    window.addEventListener('resize', updateScrollHints);
-    return () => {
-      el.removeEventListener('scroll', updateScrollHints);
-      window.removeEventListener('resize', updateScrollHints);
-    };
-  }, [view, selectedEntityId]);
+    let cancelled = false;
+    const load = () => Promise.all([api.getLedgerEntities(), api.getLedger()])
+      .then(([bookItems, entryItems]) => { if (!cancelled) { setBooks(bookItems); setEntries(entryItems); setError(false); } })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    load();
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.removeEventListener('focus', load); };
+  }, [retry]);
 
-  const handleExportSpreadsheetCsv = () => {
-    if (!selectedEntity) return;
+  const book = useMemo(() => findBook(books, bookSlug), [books, bookSlug]);
 
-    const headers = ['Item de Controle', ...monthNames, 'Total Anual'];
-    const rows: string[][] = [];
+  // Link por id (ou nome antigo) passa a mostrar o nome do livro na URL, sem perder a aba.
+  useEffect(() => {
+    if (!book || !bookSlug) return;
+    const path = bookPath(book, books);
+    if (path !== `${LEDGER_BASE}/${bookSlug}`) navigate({ pathname: path, search: window.location.search }, { replace: true });
+  }, [book, books, bookSlug, navigate]);
 
-    rows.push(['1. RECEITAS', ...Array(12).fill(''), '']);
-    categories.Receita.forEach((acc) => {
-      const monthlyValues = Array(12).fill(monthlyRevenueValue);
-      rows.push([`${acc.id} ${acc.label}`, ...monthlyValues.map((value) => formatCurrency(value)), formatCurrency(monthlyValues.reduce((a, b) => a + b, 0))]);
-    });
+  const openBookForm = (target: FinancialEntity | null) => { setEditingBook(target); setShowBookModal(true); };
+  const handleBookSaved = (saved: FinancialEntity, mode: 'created' | 'updated') => setBooks(prev => mode === 'created' ? [saved, ...prev] : prev.map(item => item.id === saved.id ? saved : item));
 
-    rows.push(['2. DESPESAS', ...Array(12).fill(''), '']);
-    categories.Despesa.forEach((acc) => {
-      const monthlyValues = Array(12).fill(monthlyExpenseValue);
-      rows.push([`${acc.id} ${acc.label}`, ...monthlyValues.map((value) => formatCurrency(value)), formatCurrency(monthlyValues.reduce((a, b) => a + b, 0))]);
-    });
-
-    rows.push(['Saldo Final', ...Array(12).fill(''), formatCurrency(estimatedResult)]);
-
-    const csv = [headers, ...rows]
-      .map((cols) => cols.map((col) => `"${String(col).replace(/"/g, '""')}"`).join(';'))
-      .join('\n');
-
-    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `livro-caixa-${selectedEntity.name.toLowerCase().replace(/\s+/g, '-')}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    notify('CSV do Livro Caixa exportado com sucesso!');
+  const removeBook = async () => {
+    if (!deleteBook || deletingBook) return;
+    setDeletingBook(true);
+    try {
+      await api.deleteLedgerEntity(deleteBook.id);
+      setBooks(prev => prev.filter(item => item.id !== deleteBook.id));
+      toast.success('Livro excluído.');
+      setDeleteBook(null);
+      if (book?.id === deleteBook.id) navigate(LEDGER_BASE, { replace: true });
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível excluir o livro.'); }
+    finally { setDeletingBook(false); }
   };
 
-  const renderList = () => (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <SectionTitle 
-        title="Gestão de Livro Caixa"
-        description="Controle financeiro detalhado de entradas e saídas da unidade."
-        icon={Layers}
-        action={
-          <Button 
-            onClick={() => setShowEntityModal(true)}
-            iconLeft={<Plus className="w-5 h-5" />}
-          >
-            Novo Livro Caixa
-          </Button>
-        }
-      />
+  if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando livro caixa…</div></PageWrapper>;
 
-      <StatGrid cols={3}>
-        <StatCard 
-          title="Livros filtrados"
-          value={listStats.total}
-          icon={Layers}
-          color="info"
-        />
-        <StatCard 
-          title="Saldo inicial consolidado"
-          value={`R$ ${listStats.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          icon={DollarSign}
-          color="info"
-        />
-        <StatCard 
-          title="Média por livro"
-          value={`R$ ${(listStats.balance / Math.max(listStats.total, 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          icon={TrendingUp}
-          color="success"
-        />
-      </StatGrid>
+  if (error) return <PageWrapper><ContentCard><EmptyState icon={BookOpen} title="Não foi possível carregar o livro caixa" description="Confira a conexão e tente novamente."
+    action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
-      <ContentCard padding="sm">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Input 
-            value={entitySearch}
-            onChange={(e) => setEntitySearch(e.target.value)}
-            placeholder="Buscar por nome ou exercício..."
-            iconLeft={<FileText className="w-4 h-4 text-slate-400" />}
-            wrapperClassName="sm:col-span-2"
-          />
-          <Select
-            value={entityYearFilter}
-            onChange={(e) => setEntityYearFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-            options={[
-              { value: 'all', label: 'Todos os anos' },
-              ...Array.from(new Set(entities.map((entity) => entity.year))).sort((a, b) => b - a).map((year) => ({ value: year, label: year.toString() }))
-            ]}
-          />
-        </div>
-      </ContentCard>
+  if (bookSlug && !book) return <PageWrapper><ContentCard><EmptyState icon={BookOpen} title="Livro não encontrado" description="O livro pode ter sido removido ou o endereço está incorreto."
+    action={<Button variant="outline" onClick={() => navigate(LEDGER_BASE)}>Voltar para o Livro Caixa</Button>} /></ContentCard></PageWrapper>;
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {filteredEntities.map(entity => (
-          <div 
-            key={entity.id} 
-            onClick={() => { setSelectedEntityId(entity.id); setView('detail'); }}
-            className="bg-white rounded-3xl border border-slate-100 shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all cursor-pointer group flex flex-col overflow-hidden relative"
-          >
-            <div className="p-10 flex-1 relative z-10">
-              <div className="flex items-center justify-between mb-8">
-                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center border border-blue-100 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner">
-                  <Briefcase className="w-7 h-7" />
-                </div>
-                <div className="flex flex-col items-end">
-                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-lg uppercase tracking-widest border border-blue-100">{entity.year}</span>
-                </div>
-              </div>
-              <h3 className="text-xl font-black text-slate-900 mb-3 group-hover:text-blue-600 transition-colors leading-tight">{entity.name}</h3>
-              <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-8 font-bold italic">
-                {entity.observations || 'Sem observações.'}
-              </p>
-              <div className="flex items-center gap-6 pt-6 border-t border-slate-50">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Saldo Inicial</p>
-                  <p className="text-sm font-black text-blue-600">R$ {entity.initialBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-              </div>
-            </div>
-            <div className="px-10 py-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-blue-600 font-black text-[10px] uppercase tracking-widest group-hover:bg-blue-50 transition-colors">
-              Explorar Balancete
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-        ))}
+  return (
+    <PageWrapper>
+      <div className="space-y-4">
+        {book
+          ? <BookDetail book={book} entries={entries.filter(entry => entry.entityId === book.id)} userId={userId}
+              onBack={() => navigate(LEDGER_BASE)} onEdit={() => openBookForm(book)} onDelete={() => setDeleteBook(book)}
+              onCreated={created => setEntries(prev => [...created, ...prev])} onRemoved={id => setEntries(prev => prev.filter(entry => entry.id !== id))} />
+          : <BooksList books={books} entries={entries} onNew={() => openBookForm(null)} onOpen={target => navigate(bookPath(target, books))} onEdit={openBookForm} onDelete={setDeleteBook} />}
       </div>
 
-      {filteredEntities.length === 0 && (
-        <div className="bg-white border border-slate-100 rounded-3xl p-10 text-center">
-          <p className="text-sm font-black text-slate-300 uppercase tracking-widest italic">Nenhum livro encontrado com os filtros atuais.</p>
-        </div>
-      )}
-    </div>
+      <LedgerBookModal isOpen={showBookModal} book={editingBook} entryCount={editingBook ? entries.filter(entry => entry.entityId === editingBook.id).length : 0} userId={userId}
+        onClose={() => setShowBookModal(false)} onSaved={handleBookSaved} />
+      <ConfirmModal isOpen={!!deleteBook} onClose={() => setDeleteBook(null)} onConfirm={removeBook} loading={deletingBook} title="Excluir livro caixa?"
+        message={`"${deleteBook?.name}" será excluído. Livros com lançamentos não podem ser excluídos: apague os lançamentos antes.`} confirmLabel="Excluir livro" variant="danger" />
+    </PageWrapper>
   );
+};
 
-  const renderSpreadsheet = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-500 flex flex-col h-full">
-      <SectionTitle 
-        title={selectedEntity?.name || ""}
-        description="Unidade Tatuí/SP • Movimento Familiar Cristão"
-        icon={Briefcase}
-        action={
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="outline"
-              size="sm"
-              onClick={() => setView('list')}
-              iconLeft={<ArrowLeft className="w-4 h-4" />}
-            >
-              Voltar
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportSpreadsheetCsv}
-              iconLeft={<Download className="w-4 h-4" />}
-              className="hidden sm:flex"
-            >
-              CSV
-            </Button>
-            <Button 
-              onClick={() => setShowLaunchModal(true)}
-              iconLeft={<DollarSign className="w-4 h-4" />}
-            >
-              Novo Lançamento
-            </Button>
-          </div>
-        }
-      />
+/* ───────────────────────────── Lista de livros ───────────────────────────── */
 
-      <StatGrid cols={4}>
-        <StatCard 
-          title="Saldo inicial"
-          value={`R$ ${Number(selectedEntity?.initialBalance || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-          icon={DollarSign}
-          color="info"
-        />
-        <StatCard 
-          title="Receita projetada"
-          value={`R$ ${formatCurrency(annualRevenueTotal)}`}
-          icon={TrendingUp}
-          color="success"
-        />
-        <StatCard 
-          title="Despesa projetada"
-          value={`R$ ${formatCurrency(annualExpenseTotal)}`}
-          icon={TrendingDown}
-          color="danger"
-        />
-        <StatCard 
-          title="Resultado estimado"
-          value={`R$ ${formatCurrency(estimatedResult)}`}
-          icon={Layers}
-          color="purple"
-        />
-      </StatGrid>
+const BooksList: React.FC<{ books: FinancialEntity[]; entries: LedgerEntry[]; onNew: () => void; onOpen: (book: FinancialEntity) => void; onEdit: (book: FinancialEntity) => void; onDelete: (book: FinancialEntity) => void }> = ({ books, entries, onNew, onOpen, onEdit, onDelete }) => {
+  const canCreate = usePermission('livro-caixa', 'create');
+  const canEdit = usePermission('livro-caixa', 'edit');
+  const canDelete = usePermission('livro-caixa', 'delete');
+  const [search, setSearch] = useState('');
+  const [year, setYear] = useState('all');
+  const query = normalizeDirectoryText(search);
 
-      <ContentCard padding="none" className="flex-1 overflow-hidden flex flex-col">
+  const rows = useMemo(() => books.map(book => { const own = entries.filter(entry => entry.entityId === book.id); return { book, count: own.length, ...summarize(own, book.initialBalance) }; }), [books, entries]);
+  const filtered = rows.filter(row => (!query || normalizeDirectoryText(`${row.book.name} ${row.book.year}`).includes(query)) && (year === 'all' || String(row.book.year) === year)).sort((a, b) => b.book.year - a.book.year || a.book.name.localeCompare(b.book.name, 'pt-BR'));
+  const yearOptions = [{ value: 'all', label: 'Todos os anos' }, ...Array.from(new Set(books.map(book => book.year))).sort((a, b) => b - a).map(value => ({ value: String(value), label: String(value) }))];
+  const totalBalance = rows.reduce((sum, row) => sum + row.balance, 0);
+  const totalEntries = rows.reduce((sum, row) => sum + row.count, 0);
 
-        <div className="px-6 py-5 border-b border-slate-100 bg-white">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Evolução mensal (visual rápido)</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
-            {[42, 58, 51, 64, 60, 74, 68, 80, 73, 88, 91, 95].map((value, idx) => (
-              <div key={monthNames[idx]} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{monthNames[idx].slice(0, 3)}</p>
-                <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                  <div className="h-full bg-blue-600 transition-all duration-700" style={{ width: `${value}%` }} />
-                </div>
-                <p className="mt-1.5 text-[10px] font-black text-slate-600">{value}%</p>
-              </div>
-            ))}
-          </div>
-        </div>
+  return <>
+    <SectionTitle title="Livro Caixa" icon={BookOpen} description="Entradas e saídas de cada exercício."
+      action={canCreate ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={onNew}>Novo livro</Button> : undefined} />
+    <StatGrid cols={3}>
+      <StatCard title="Livros" value={books.length} icon={BookOpen} color="info" />
+      <StatCard title="Saldo atual" value={money(totalBalance)} icon={Wallet} color={totalBalance >= 0 ? 'success' : 'danger'} description="Soma de todos os livros" />
+      <StatCard title="Lançamentos" value={totalEntries} icon={ListChecks} color="purple" />
+    </StatGrid>
+    <FilterLine>
+      <FilterLineSection grow>
+        <FilterLineItem grow><FilterLineSearch aria-label="Buscar livro" value={search} onChange={setSearch} placeholder="Título ou ano…" /></FilterLineItem>
+        <FilterLineItem><Select aria-label="Filtrar por ano" value={year} onChange={event => setYear(event.target.value)} options={yearOptions} /></FilterLineItem>
+      </FilterLineSection>
+      <FilterLineSection align="right"><span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'livro' : 'livros'}</span></FilterLineSection>
+    </FilterLine>
 
-        <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/50 via-white to-blue-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-500">
-              <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
-              Arraste para os lados para ver todos os meses
+    {filtered.length === 0
+      ? <ContentCard><EmptyState icon={BookOpen} title="Nenhum livro encontrado" description={search || year !== 'all' ? 'Ajuste a busca ou o ano.' : 'Crie o livro caixa do exercício para começar a lançar.'} action={!search && year === 'all' && canCreate ? <Button size="sm" onClick={onNew}>Novo livro</Button> : undefined} /></ContentCard>
+      : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map(({ book, count, balance, income, expenses }) =>
+        <ContentCard key={book.id} padding="none" className="group flex h-full flex-col overflow-hidden transition-all hover:border-blue-200">
+          <div className="flex flex-1 flex-col gap-3 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-100 bg-blue-50 text-blue-600"><BookOpen size={14} /></div>
+              <Badge size="sm" color="info">{book.year}</Badge>
             </div>
-            <div className="w-56 h-1.5 rounded-full bg-blue-100 overflow-hidden">
-              <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${scrollProgress}%` }} />
-            </div>
+            <button type="button" className="text-left focus-visible:outline-blue-500" onClick={() => onOpen(book)}>
+              <h3 className="text-sm font-semibold leading-tight text-slate-900 break-words transition-colors group-hover:text-blue-600">{book.name}</h3>
+              <p className="mt-1 text-xs text-slate-500 break-words">{book.observations || 'Sem observações'}</p>
+            </button>
+            <dl className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-xs">
+              <div><dt className="text-[11px] text-slate-500">Entradas</dt><dd className="mt-0.5 font-semibold tabular-nums text-emerald-700">{money(income)}</dd></div>
+              <div><dt className="text-[11px] text-slate-500">Saídas</dt><dd className="mt-0.5 font-semibold tabular-nums text-red-600">{money(expenses)}</dd></div>
+              <div><dt className="text-[11px] text-slate-500">Saldo</dt><dd className={`mt-0.5 font-semibold tabular-nums ${balance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{money(balance)}</dd></div>
+            </dl>
+            <p className="text-[11px] text-slate-500">{count} {count === 1 ? 'lançamento' : 'lançamentos'} · saldo inicial {money(Number(book.initialBalance) || 0)}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => handleLedgerScrollToEdge('start')}
-            >
-              Jan
-            </Button>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => handleLedgerHorizontalScroll('left')}
-              disabled={!canScrollLeft}
-            >
-              ←
-            </Button>
-            <Button
-              variant="primary"
-              size="xs"
-              onClick={() => handleLedgerHorizontalScroll('right')}
-              disabled={!canScrollRight}
-            >
-              →
-            </Button>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => handleLedgerScrollToEdge('end')}
-            >
-              Dez
-            </Button>
+          <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
+            <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={() => onOpen(book)}>Abrir livro</Button>
+            {canEdit && <IconButton variant="ghost" size="xs" aria-label={`Editar ${book.name}`} className="h-8 w-8" onClick={() => onEdit(book)}><Pencil size={14} /></IconButton>}
+            {canDelete && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${book.name}`} className="h-8 w-8" onClick={() => onDelete(book)}><Trash2 size={14} className="text-red-500" /></IconButton>}
           </div>
-        </div>
+        </ContentCard>)}</div>}
+  </>;
+};
 
-        <div ref={spreadsheetScrollRef} tabIndex={0} onKeyDown={(e) => { if (e.key === 'ArrowRight') handleLedgerHorizontalScroll('right'); if (e.key === 'ArrowLeft') handleLedgerHorizontalScroll('left'); }} className="overflow-x-auto overflow-y-auto relative flex-1 scrollbar-thin scrollbar-thumb-blue-200 scrollbar-track-blue-50 focus:outline-none">
-          {canScrollRight && (
-            <div className="pointer-events-none absolute right-0 top-0 z-20 h-full w-10 bg-gradient-to-l from-white via-white/80 to-transparent" />
-          )}
-          {canScrollLeft && (
-            <div className="pointer-events-none absolute left-0 top-0 z-20 h-full w-10 bg-gradient-to-r from-white via-white/80 to-transparent" />
-          )}
-          <table className="w-full text-left border-separate border-spacing-0 min-w-[1760px]">
-            <thead className="sticky top-0 z-30">
-              <tr className="bg-slate-50">
-                <th className="sticky left-0 top-0 z-40 bg-slate-50 px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-b border-slate-100 min-w-[320px] shadow-[2px_0_5px_rgba(0,0,0,0.01)]">
-                  Item de Controle
-                </th>
-                {monthNames.map((m, monthIdx) => (
-                  <th
-                    key={m}
-                    onClick={() => setFocusedMonthIndex(monthIdx)}
-                    className={cn(
-                      "px-4 py-5 text-[10px] font-black uppercase text-center border-r border-b border-slate-100 min-w-[120px] cursor-pointer transition-colors",
-                      focusedMonthIndex === monthIdx ? "bg-blue-100 text-blue-700" : "bg-slate-50 text-slate-400 hover:bg-blue-50"
-                    )}
-                  >
-                    {m}
-                  </th>
-                ))}
-                <th className="px-6 py-5 text-[10px] font-black text-blue-600 uppercase text-center bg-blue-50/30 border-b border-slate-100 min-w-[140px]">Total Anual</th>
-              </tr>
-            </thead>
-            <tbody className="text-xs">
-              <tr className="bg-blue-600 text-white">
-                <td colSpan={14} className="sticky left-0 z-20 bg-blue-600 px-8 py-3 font-black uppercase tracking-widest text-[9px]">1. RECEITAS</td>
-              </tr>
-              {categories.Receita.map((acc, idx) => (
-                <tr key={acc.id} className="hover:bg-blue-50/10">
-                  <td className="sticky left-0 z-10 bg-white px-8 py-4 border-r border-b border-slate-50 font-bold text-slate-700 shadow-[2px_0_5px_rgba(0,0,0,0.01)]">
-                    <span className="text-blue-500 mr-2 font-black">{acc.id}</span> {acc.label}
-                  </td>
-                  {monthNames.map((_, i) => (
-                    <td key={i} className={cn(
-                      "px-4 py-4 text-right border-r border-b border-slate-50 font-black tabular-nums",
-                      focusedMonthIndex === i ? "bg-blue-50/60 text-blue-700" : "text-emerald-600"
-                    )}>{formatCurrency(monthlyRevenueValue)}</td>
-                  ))}
-                  <td className="px-6 py-4 text-right bg-blue-50/10 border-b border-slate-50 font-black text-blue-700 tabular-nums">{formatCurrency(monthlyRevenueValue * 12)}</td>
+/* ───────────────────────────── Livro aberto ───────────────────────────── */
+
+const bookTabs = [{ id: 'lancamentos', label: 'Lançamentos', icon: ListChecks }, { id: 'balancete', label: 'Balancete', icon: Table2 }, { id: 'grafico', label: 'Gráfico', icon: BarChart3 }] as const;
+const bookTabIds = bookTabs.map(tab => tab.id);
+
+const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; userId?: string; onBack: () => void; onEdit: () => void; onDelete: () => void; onCreated: (entries: LedgerEntry[]) => void; onRemoved: (id: string) => void }> = ({ book, entries, userId, onBack, onEdit, onDelete, onCreated, onRemoved }) => {
+  const canCreate = usePermission('livro-caixa', 'create');
+  const canEdit = usePermission('livro-caixa', 'edit');
+  const canDelete = usePermission('livro-caixa', 'delete');
+  const [tab, setTab] = useUrlTab(bookTabIds, 'lancamentos');
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [monthFilter, setMonthFilter] = useState('all');
+  const [showEntry, setShowEntry] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<LedgerEntry | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  const totals = useMemo(() => summarize(entries, book.initialBalance), [entries, book.initialBalance]);
+  const monthly = useMemo(() => monthlyTotals(entries), [entries]);
+  const sheet = useMemo(() => balanceSheet(entries), [entries]);
+
+  const query = normalizeDirectoryText(search);
+  const filtered = useMemo(() => [...entries]
+    .filter(entry => (typeFilter === 'all' || entry.type === typeFilter) && (monthFilter === 'all' || Number(entry.date.slice(5, 7)) === Number(monthFilter)) && (!query || normalizeDirectoryText(`${entry.description} ${entry.category || ''}`).includes(query)))
+    .sort((a, b) => b.date.localeCompare(a.date)), [entries, typeFilter, monthFilter, query]);
+  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(filtered, 15);
+  const hasFilter = !!query || typeFilter !== 'all' || monthFilter !== 'all';
+
+  const remove = async () => {
+    if (!removeTarget || removing) return;
+    setRemoving(true);
+    try { await api.deleteLedger(removeTarget.id); onRemoved(removeTarget.id); toast.success('Lançamento excluído.'); setRemoveTarget(null); }
+    catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível excluir o lançamento.'); }
+    finally { setRemoving(false); }
+  };
+
+  const exportCsv = () => {
+    const cell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const rows: (string | number)[][] = [['Conta', ...monthNames, 'Total'], ['ENTRADAS']];
+    sheet.income.forEach(row => rows.push([row.category, ...row.months.map(number), number(row.total)]));
+    rows.push(['Total de entradas', ...monthly.income.map(number), number(totals.income)], ['SAÍDAS']);
+    sheet.expenses.forEach(row => rows.push([row.category, ...row.months.map(number), number(row.total)]));
+    rows.push(['Total de saídas', ...monthly.expenses.map(number), number(totals.expenses)], ['Saldo inicial', ...Array(12).fill(''), number(Number(book.initialBalance) || 0)], ['Saldo final', ...Array(12).fill(''), number(totals.balance)]);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['﻿' + rows.map(row => row.map(cell).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8;' }));
+    link.download = `livro-caixa-${book.year}-${book.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
+  };
+
+  let running = Number(book.initialBalance) || 0;
+  const chart = shortMonths.map((label, index) => ({ label, Entradas: monthly.income[index], Saídas: monthly.expenses[index] }));
+  const columns = [
+    { header: 'Data', render: (entry: LedgerEntry) => <span className="text-xs whitespace-nowrap text-slate-700">{dateLabel(entry.date)}</span> },
+    { header: 'Descrição', render: (entry: LedgerEntry) => <div className="max-w-md min-w-0"><p className="text-xs text-slate-800 break-words">{entry.description || entry.category || 'Sem descrição'}</p>{entry.description && entry.category && <p className="mt-0.5 text-[11px] text-slate-500">{entry.category}</p>}</div> },
+    { header: 'Tipo', render: (entry: LedgerEntry) => <Badge size="sm" dot color={entry.type === 'IN' ? 'success' : 'danger'}>{entry.type === 'IN' ? 'Entrada' : 'Saída'}</Badge> },
+    { header: 'Valor', render: (entry: LedgerEntry) => <span className={`text-xs font-semibold tabular-nums whitespace-nowrap ${entry.type === 'IN' ? 'text-emerald-700' : 'text-red-600'}`}>{entry.type === 'IN' ? '+' : '−'} {money(entry.amount)}</span> },
+    { header: '', render: (entry: LedgerEntry) => canDelete ? <IconButton variant="ghost" size="xs" aria-label={`Excluir lançamento de ${money(entry.amount)}`} onClick={event => { event.stopPropagation(); setRemoveTarget(entry); }}><Trash2 size={14} className="text-red-500" /></IconButton> : null },
+  ];
+
+  return <>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={onBack}>Voltar para o Livro Caixa</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" iconLeft={<Download size={14} />} onClick={exportCsv}>Exportar CSV</Button>
+        {canEdit && <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={onEdit}>Editar livro</Button>}
+        {canDelete && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={onDelete}>Excluir livro</Button>}
+        {canCreate && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowEntry(true)}>Novo lançamento</Button>}
+      </div>
+    </div>
+
+    <ContentCard padding="md">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600"><BookOpen size={24} /></div>
+        <div className="min-w-0"><h1 className="text-base sm:text-lg font-semibold text-slate-900 break-words">{book.name}</h1>
+          <p className="mt-1 text-xs text-slate-500 break-words">Exercício {book.year}{book.observations ? ` · ${book.observations}` : ''}</p></div>
+      </div>
+    </ContentCard>
+
+    <StatGrid cols={4}>
+      <StatCard title="Saldo inicial" value={money(Number(book.initialBalance) || 0)} icon={DollarSign} color="info" />
+      <StatCard title="Entradas" value={money(totals.income)} icon={TrendingUp} color="success" />
+      <StatCard title="Saídas" value={money(totals.expenses)} icon={TrendingDown} color="danger" />
+      <StatCard title="Saldo atual" value={money(totals.balance)} icon={Wallet} color={totals.balance >= 0 ? 'purple' : 'danger'} />
+    </StatGrid>
+
+    <Tabs<typeof bookTabs[number]['id']> items={bookTabs} value={tab} onChange={setTab} label="Seções do livro caixa">
+      {tab === 'lancamentos' && <div className="space-y-3">
+        <FilterLine>
+          <FilterLineSection grow>
+            <FilterLineItem grow><FilterLineSearch aria-label="Buscar lançamento" value={search} onChange={setSearch} placeholder="Descrição ou conta…" /></FilterLineItem>
+            <FilterLineItem><FilterLineSegmented value={typeFilter} onChange={value => setTypeFilter(String(value))} options={[{ value: 'all', label: 'Todos' }, { value: 'IN', label: 'Entradas' }, { value: 'OUT', label: 'Saídas' }]} /></FilterLineItem>
+            <FilterLineItem><Select aria-label="Mês" value={monthFilter} onChange={event => setMonthFilter(event.target.value)} options={[{ value: 'all', label: 'Todos os meses' }, ...monthNames.map((label, index) => ({ value: String(index + 1), label }))]} /></FilterLineItem>
+          </FilterLineSection>
+          <FilterLineSection align="right">
+            <span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'lançamento' : 'lançamentos'}</span>
+            {hasFilter && <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setTypeFilter('all'); setMonthFilter('all'); }}>Limpar filtros</Button>}
+          </FilterLineSection>
+        </FilterLine>
+        <ContentCard padding="none">
+          <GridTable<LedgerEntry> data={paginatedData} columns={columns} keyExtractor={entry => entry.id} noDesktopCard
+            emptyMessage={<EmptyState icon={ListChecks} title={entries.length ? 'Nenhum lançamento encontrado' : 'Nenhum lançamento neste livro'} description={entries.length ? 'Ajuste a busca ou os filtros.' : 'Registre a primeira entrada ou saída do exercício.'}
+              action={!entries.length && canCreate ? <Button size="sm" onClick={() => setShowEntry(true)}>Novo lançamento</Button> : undefined} />}
+            pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+        </ContentCard>
+      </div>}
+
+      {tab === 'balancete' && <ContentCard padding="none">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-left text-xs">
+            <thead><tr className="bg-slate-50">
+              <th scope="col" className="sticky left-0 z-10 min-w-[220px] border-b border-slate-100 bg-slate-50 px-3 py-2.5 text-[11px] font-semibold text-slate-500">Conta</th>
+              {shortMonths.map(label => <th key={label} scope="col" className="border-b border-slate-100 px-3 py-2.5 text-right text-[11px] font-semibold text-slate-500">{label}</th>)}
+              <th scope="col" className="border-b border-slate-100 px-3 py-2.5 text-right text-[11px] font-semibold text-slate-700">Total</th>
+            </tr></thead>
+            <tbody>
+              {[{ title: 'Entradas', rows: sheet.income, months: monthly.income, total: totals.income, tone: 'text-emerald-700' }, { title: 'Saídas', rows: sheet.expenses, months: monthly.expenses, total: totals.expenses, tone: 'text-red-600' }].map(section => <React.Fragment key={section.title}>
+                <tr><th scope="colspan" colSpan={14} className="sticky left-0 border-b border-slate-100 bg-slate-100/70 px-3 py-2 text-left text-[11px] font-semibold uppercase text-slate-600">{section.title}</th></tr>
+                {section.rows.length === 0 && <tr><td colSpan={14} className="border-b border-slate-50 px-3 py-3 text-slate-400">Nenhum lançamento.</td></tr>}
+                {section.rows.map(row => <tr key={row.category} className="hover:bg-slate-50/60">
+                  <th scope="row" className="sticky left-0 z-10 border-b border-slate-50 bg-white px-3 py-2 text-left font-normal text-slate-800">{row.category}</th>
+                  {row.months.map((value, index) => <td key={index} className={`border-b border-slate-50 px-3 py-2 text-right tabular-nums ${value ? section.tone : 'text-slate-300'}`}>{value ? number(value) : '—'}</td>)}
+                  <td className={`border-b border-slate-50 px-3 py-2 text-right font-semibold tabular-nums ${section.tone}`}>{number(row.total)}</td>
+                </tr>)}
+                <tr className="bg-slate-50/60">
+                  <th scope="row" className="sticky left-0 z-10 border-b border-slate-100 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-800">Total de {section.title.toLowerCase()}</th>
+                  {section.months.map((value, index) => <td key={index} className="border-b border-slate-100 px-3 py-2 text-right font-semibold tabular-nums text-slate-800">{value ? number(value) : '—'}</td>)}
+                  <td className="border-b border-slate-100 px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{number(section.total)}</td>
                 </tr>
-              ))}
-              <tr className="bg-slate-800 text-white">
-                <td colSpan={14} className="sticky left-0 z-20 bg-slate-800 px-8 py-3 font-black uppercase tracking-widest text-[9px]">2. DESPESAS</td>
-              </tr>
-              {categories.Despesa.map((acc, idx) => (
-                <tr key={acc.id} className="hover:bg-red-50/10">
-                  <td className="sticky left-0 z-10 bg-white px-8 py-4 border-r border-b border-slate-50 font-bold text-slate-700 shadow-[2px_0_5px_rgba(0,0,0,0.01)]">
-                    <span className="text-red-500 mr-2 font-black">{acc.id}</span> {acc.label}
-                  </td>
-                  {monthNames.map((_, i) => (
-                    <td key={i} className={cn(
-                      "px-4 py-4 text-right border-r border-b border-slate-50 font-black tabular-nums",
-                      focusedMonthIndex === i ? "bg-rose-50/60 text-rose-700" : "text-rose-500"
-                    )}>{formatCurrency(monthlyExpenseValue)}</td>
-                  ))}
-                  <td className="px-6 py-4 text-right bg-slate-50/50 border-b border-slate-50 font-black text-rose-700 tabular-nums">{formatCurrency(monthlyExpenseValue * 12)}</td>
-                </tr>
-              ))}
-              <tr className="bg-blue-700 text-white">
-                <td className="sticky left-0 z-20 bg-blue-800 px-8 py-6 border-r border-blue-900 font-black uppercase text-[10px] tracking-widest shadow-[2px_0_5px_rgba(0,0,0,0.05)]">Saldo Final</td>
-                <td colSpan={13} className="px-10 py-6 text-right font-black text-2xl tracking-tight pr-16 italic">R$ {formatCurrency(estimatedResult)}</td>
+              </React.Fragment>)}
+              <tr>
+                <th scope="row" className="sticky left-0 z-10 bg-blue-50 px-3 py-2.5 text-left font-semibold text-blue-900">Saldo acumulado</th>
+                {monthly.income.map((income, index) => { running += income - monthly.expenses[index]; return <td key={index} className={`bg-blue-50 px-3 py-2.5 text-right font-semibold tabular-nums ${running >= 0 ? 'text-blue-900' : 'text-red-600'}`}>{number(running)}</td>; })}
+                <td className={`bg-blue-50 px-3 py-2.5 text-right font-semibold tabular-nums ${totals.balance >= 0 ? 'text-blue-900' : 'text-red-600'}`}>{number(totals.balance)}</td>
               </tr>
             </tbody>
           </table>
         </div>
-      </ContentCard>
-    </div>
-  );
+        <p className="border-t border-slate-100 p-3 text-xs text-slate-500">Saldo inicial de {money(Number(book.initialBalance) || 0)} somado mês a mês. Role para o lado para ver todos os meses.</p>
+      </ContentCard>}
 
-  return (
-    <PageWrapper>
-      {notification && (
-        <div className="fixed top-24 right-10 z-[300] bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in fade-in slide-in-from-right duration-500 border border-emerald-500">
-          <div className="bg-white/20 p-1.5 rounded-lg"><Check className="w-4 h-4" /></div>
-          <span className="font-black text-[10px] uppercase tracking-widest">{notification}</span>
-        </div>
-      )}
+      {tab === 'grafico' && <PanelCard title="Entradas e saídas por mês" description={`Exercício ${book.year}.`}>
+        {entries.length ? <div className="h-72 min-w-0">
+          <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 240 }}><BarChart data={chart}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(value: number) => money(value)} /><Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="Entradas" fill="#10b981" radius={[3, 3, 0, 0]} barSize={14} /><Bar dataKey="Saídas" fill="#ef4444" radius={[3, 3, 0, 0]} barSize={14} />
+          </BarChart></ResponsiveContainer>
+        </div> : <EmptyState icon={BarChart3} title="Sem lançamentos" description="O gráfico aparece depois do primeiro lançamento." />}
+      </PanelCard>}
+    </Tabs>
 
-      {view === 'list' ? renderList() : renderSpreadsheet()}
-
-      {/* MODAL NOVO LIVRO CAIXA */}
-      <Modal
-        isOpen={showEntityModal}
-        onClose={() => setShowEntityModal(false)}
-        title="Novo Livro Caixa"
-        size="md"
-      >
-        <div className="space-y-6">
-          <Input 
-            label="Título"
-            value={newEntity.name}
-            onChange={e => setNewEntity({...newEntity, name: e.target.value})}
-            placeholder="Ex: Livro Caixa Unidade"
-          />
-          <div className="grid grid-cols-2 gap-4">
-            <Input 
-              label="Ano"
-              type="number"
-              value={newEntity.year}
-              onChange={e => setNewEntity({...newEntity, year: parseInt(e.target.value)})}
-            />
-            <Input 
-              label="Saldo Inicial"
-              type="number"
-              value={newEntity.initialBalance}
-              onChange={e => setNewEntity({...newEntity, initialBalance: e.target.value})}
-              addonLeft="R$"
-            />
-          </div>
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setShowEntityModal(false)}>Cancelar</Button>
-          <Button onClick={handleCreateEntity}>Criar Livro</Button>
-        </ModalFooter>
-      </Modal>
-
-      {/* MODAL DE LANÇAMENTO EM LOTE */}
-      <Modal
-        isOpen={showLaunchModal}
-        onClose={() => setShowLaunchModal(false)}
-        title="Lançamento em Lote"
-        size="lg"
-      >
-        <div className="space-y-8">
-          <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100">
-            <button 
-              onClick={() => setLaunchForm({...launchForm, type: 'Receita', category: ''})}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all",
-                launchForm.type === 'Receita' ? "bg-white text-emerald-600 shadow-sm border border-slate-100" : "text-slate-400"
-              )}
-            >
-              <TrendingUp className="w-4 h-4" /> Receita
-            </button>
-            <button 
-              onClick={() => setLaunchForm({...launchForm, type: 'Despesa', category: ''})}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all",
-                launchForm.type === 'Despesa' ? "bg-white text-rose-500 shadow-sm border border-slate-100" : "text-slate-400"
-              )}
-            >
-              <TrendingDown className="w-4 h-4" /> Despesa
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <Select 
-              label="Conta Contábil"
-              wrapperClassName="sm:col-span-2"
-              value={launchForm.category}
-              onChange={e => setLaunchForm({...launchForm, category: e.target.value})}
-              placeholder="Selecione uma conta..."
-              options={categories[launchForm.type].map(c => ({ value: c.label, label: `${c.id} - ${c.label}` }))}
-              iconLeft={launchForm.type === 'Receita' ? <TrendingUp className="w-4 h-4 text-emerald-500" /> : <TrendingDown className="w-4 h-4 text-rose-500" />}
-            />
-
-            <Input 
-              label="Valor Unitário"
-              type="number"
-              placeholder="0,00"
-              value={launchForm.amount}
-              onChange={e => setLaunchForm({...launchForm, amount: e.target.value})}
-              addonLeft="R$"
-            />
-
-            <div className="flex flex-col gap-1.5">
-              <label className="ds-label">Exercício</label>
-              <div className="h-10 bg-slate-50 border border-slate-200 rounded-[10px] px-3 flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest">
-                <Calendar className="w-4 h-4" /> {selectedEntity?.year}
-              </div>
-            </div>
-
-            <Input 
-              label="Histórico / Descrição"
-              wrapperClassName="sm:col-span-2"
-              placeholder="Descrição opcional do lançamento..."
-              value={launchForm.description}
-              onChange={e => setLaunchForm({...launchForm, description: e.target.value})}
-            />
-          </div>
-
-          <div className="space-y-4">
-             <div className="flex items-center justify-between">
-                <label className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Aplicar nos meses:</label>
-                <div className="flex gap-4">
-                   <button onClick={() => setLaunchForm({...launchForm, months: Array.from({length: 12}, (_, i) => i)})} className="text-[9px] font-black text-blue-600 uppercase tracking-widest hover:underline">Todos</button>
-                   <button onClick={() => setLaunchForm({...launchForm, months: []})} className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:underline">Limpar</button>
-                </div>
-             </div>
-             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-               {monthNames.map((name, idx) => (
-                 <button 
-                   key={name}
-                   onClick={() => toggleMonthSelection(idx)}
-                   className={cn(
-                     "py-2.5 text-[9px] font-black rounded-xl border transition-all uppercase tracking-widest",
-                     launchForm.months.includes(idx) ? "bg-blue-600 border-blue-600 text-white shadow-md" : "bg-white border-slate-100 text-slate-400 hover:border-blue-100 hover:bg-slate-50"
-                   )}
-                 >
-                   {name.substring(0, 3)}
-                 </button>
-               ))}
-             </div>
-          </div>
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" onClick={() => setShowLaunchModal(false)}>Cancelar</Button>
-          <Button 
-            onClick={handleLaunchSubmit}
-            variant={launchForm.type === 'Receita' ? 'success' : 'danger'}
-            iconLeft={<Save className="w-4 h-4" />}
-          >
-            Processar Lançamentos
-          </Button>
-        </ModalFooter>
-      </Modal>
-    </PageWrapper>
-  );
+    <LedgerEntryModal isOpen={showEntry} book={book} userId={userId} onClose={() => setShowEntry(false)} onSaved={onCreated} />
+    <ConfirmModal isOpen={!!removeTarget} onClose={() => setRemoveTarget(null)} onConfirm={remove} loading={removing} title="Excluir lançamento?"
+      message={removeTarget ? `${removeTarget.type === 'IN' ? 'Entrada' : 'Saída'} de ${money(removeTarget.amount)} em ${dateLabel(removeTarget.date)} será excluída. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir lançamento" variant="danger" />
+  </>;
 };
 
 export default GeneralLedger;

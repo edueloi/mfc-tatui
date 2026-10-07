@@ -13,6 +13,8 @@ Referência extraída das telas já ajustadas:
 | Painel (Dashboard) | `views/Dashboard.tsx` | **painel** com abas para não amontoar (Visão geral / Aniversários / Financeiro) |
 | Nucleação (lista + contato) | `views/Nucleacao.tsx` + `views/NucleationDetail.tsx` + `components/NucleationContactModal.tsx` | lista de contatos → página do contato (URL por nome) com histórico e registro de tentativa |
 | Ajustes | `views/Settings.tsx` | tela com **abas na rota** (`/configuracoes/:aba`) e seções independentes |
+| Usuários | `views/UserManagement.tsx` + `components/UserFormModal.tsx` | cadastro com modal (vincular MFCista ou cadastro direto), ativar/inativar acesso |
+| Livro Caixa (livros → lançamentos) | `views/GeneralLedger.tsx` + `components/LedgerBookModal.tsx` + `components/LedgerEntryModal.tsx` + `utils/ledger.ts` | lista de livros → livro com abas Lançamentos / Balancete / Gráfico |
 | Relatórios | `views/Reports.tsx` | **painel de indicadores** (filtros de período, KPIs, abas Visão geral/Tabela) |
 | Criar/Editar MFCista | `views/MemberFormPage.tsx` + `components/MemberForm.tsx` | **formulários** de cadastro (mesma tela cria e edita) |
 
@@ -303,6 +305,13 @@ Evitar: sombras (`shadow-md`), `tracking-wide`, caixa alta forçada, `text-[9px]
 8. Conferir mobile (390px) e `npx tsc --noEmit`.
 
 ---
+
+## Tela que mostra sucesso sem gravar (aconteceu no Livro Caixa)
+
+O Livro Caixa antigo tinha balancete com valores fixos (R$ 7.100 e R$ 850 por conta, todo mês), "evolução mensal" com porcentagens fixas e um botão "Processar Lançamentos" que só exibia "sucesso" sem chamar a API. Regras para não repetir:
+- **Todo número na tela vem de dado real.** Sem valor de exemplo no código (`[42, 58, 51…]`, `monthlyRevenueValue = 7100`).
+- **Todo toast de sucesso vem depois da resposta da API**, nunca antes. Teste olhando o banco ou recarregando a página.
+- Lançamento pertence a um livro (`entity_id`); a data precisa estar no exercício do livro. Livro com lançamentos não pode ser excluído, e lançamento errado se corrige excluindo e lançando de novo.
 
 ## Telas de configuração: não deixar controle que não faz nada
 

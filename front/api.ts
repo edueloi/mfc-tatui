@@ -80,6 +80,7 @@ export const api = {
 
   getLedger: () => request('/ledger'),
   createLedger: (data: any) => request('/ledger', { method: 'POST', body: JSON.stringify(data) }),
+  deleteLedger: (id: string) => request(`/ledger/${id}`, { method: 'DELETE' }),
   getLedgerEntities: () => request('/ledger-entities'),
   createLedgerEntity: (data: any) => request('/ledger-entities', { method: 'POST', body: JSON.stringify(data) }),
   updateLedgerEntity: (id: string, data: any) => request(`/ledger-entities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

@@ -10,6 +10,18 @@ const { validReceiptDate } = require('../utils/payment-accounting');
 
 const router = express.Router();
 
+// Cada lançamento pertence a um Livro Caixa (financial_entities). A coluna é criada sozinha na primeira execução.
+let ledgerReady;
+const ensureLedgerEntityColumn = () => {
+  if (!ledgerReady) {
+    ledgerReady = (async () => {
+      const column = await db.prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ledger' AND COLUMN_NAME = 'entity_id'").get();
+      if (!column) await db.prepare('ALTER TABLE ledger ADD COLUMN entity_id VARCHAR(36) NULL').run();
+    })().catch(error => { ledgerReady = undefined; console.error('Não foi possível preparar a coluna entity_id do livro caixa:', error.message); throw error; });
+  }
+  return ledgerReady;
+};
+
 // Vendas de eventos
 router.get('/event-sales', async (req, res) => {
   const rows = await db.prepare('SELECT * FROM event_sales ORDER BY date DESC').all();
@@ -102,28 +114,50 @@ router.post('/payments', async (req, res) => {
 
 // Livro-caixa (ledger)
 router.get('/ledger', async (req, res) => {
-  const rows = await db.prepare('SELECT * FROM ledger ORDER BY date DESC').all();
-  res.json(rows.map(rowToLedger));
+  try {
+    await ensureLedgerEntityColumn();
+    const { entityId } = req.query;
+    const rows = entityId
+      ? await db.prepare('SELECT * FROM ledger WHERE entity_id = ? ORDER BY date DESC').all(entityId)
+      : await db.prepare('SELECT * FROM ledger ORDER BY date DESC').all();
+    res.json(rows.map(rowToLedger));
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao buscar lançamentos: ' + error.message });
+  }
 });
 
 router.post('/ledger', async (req, res) => {
-  const data = req.body || {};
-  const id = uuid();
-  await db.prepare(`
-    INSERT INTO ledger (id, team_id, type, description, amount, date, category, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
-    data.teamId || null,
-    data.type,
-    data.description || '',
-    data.amount || 0,
-    data.date,
-    data.category || null,
-    data.createdBy || null
-  );
-  const row = await db.prepare('SELECT * FROM ledger WHERE id = ?').get(id);
-  res.status(201).json(rowToLedger(row));
+  try {
+    await ensureLedgerEntityColumn();
+    const data = req.body || {};
+    const amount = Number(data.amount);
+    if (!['IN', 'OUT'].includes(data.type)) return res.status(400).json({ error: 'Informe se o lançamento é entrada ou saída.' });
+    if (!(amount > 0)) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || ''))) return res.status(400).json({ error: 'Informe uma data válida.' });
+    if (data.entityId) {
+      const entity = await db.prepare('SELECT id, year FROM financial_entities WHERE id = ?').get(data.entityId);
+      if (!entity) return res.status(404).json({ error: 'Livro caixa não encontrado.' });
+      if (Number(data.date.slice(0, 4)) !== Number(entity.year)) return res.status(422).json({ error: `A data precisa estar em ${entity.year}, o exercício deste livro.` });
+    }
+    const id = uuid();
+    await db.prepare(`
+      INSERT INTO ledger (id, team_id, entity_id, type, description, amount, date, category, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, data.teamId || null, data.entityId || null, data.type, String(data.description || '').slice(0, 255), amount, data.date, data.category || null, data.createdBy || null);
+    const row = await db.prepare('SELECT * FROM ledger WHERE id = ?').get(id);
+    res.status(201).json(rowToLedger(row));
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao salvar lançamento: ' + error.message });
+  }
+});
+
+router.delete('/ledger/:id', async (req, res) => {
+  try {
+    await db.prepare('DELETE FROM ledger WHERE id = ?').run(req.params.id);
+    res.status(204).end();
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao excluir lançamento: ' + error.message });
+  }
 });
 
 // Entidades financeiras
@@ -152,9 +186,16 @@ router.put('/ledger-entities/:id', async (req, res) => {
 });
 
 router.delete('/ledger-entities/:id', async (req, res) => {
-  const { id } = req.params;
-  await db.prepare('DELETE FROM financial_entities WHERE id = ?').run(id);
-  res.status(204).end();
+  try {
+    await ensureLedgerEntityColumn();
+    const { id } = req.params;
+    const used = await db.prepare('SELECT COUNT(*) AS total FROM ledger WHERE entity_id = ?').get(id);
+    if (Number(used?.total) > 0) return res.status(422).json({ error: 'Este livro tem lançamentos. Exclua os lançamentos antes de excluir o livro.' });
+    await db.prepare('DELETE FROM financial_entities WHERE id = ?').run(id);
+    res.status(204).end();
+  } catch (error) {
+    res.status(500).json({ error: 'Erro ao excluir livro: ' + error.message });
+  }
 });
 
 module.exports = router;
