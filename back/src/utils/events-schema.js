@@ -38,7 +38,7 @@ const createEventFromMeeting = async meeting => {
   await db.prepare(`
     INSERT INTO events (id, name, date, start_time, end_time, location, description, event_kind, has_fee, registration_open, is_active, show_on_dashboard,
       cost_value, goal_value, public_token, bridal_meeting_id, city_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'externo', 0, 0, ?, 1, 0, 0, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'externo', 0, 1, ?, 1, 0, 0, ?, ?, ?)
   `).run(id, meeting.name, meeting.date, meeting.start_time || null, meeting.end_time || null, meeting.location || null,
     'Encontro de Noivos. Os casais são cadastrados e pagam pela ficha do encontro; aqui ficam os gastos, as entradas e o resultado.',
     Number(meeting.is_active) ? 1 : 0, uuid(), meeting.id, meeting.city_id || null);
@@ -90,6 +90,8 @@ const ensureEventSchema = () => {
       if (await tableExists('bridal_meetings')) {
         const pending = await db.prepare('SELECT * FROM bridal_meetings WHERE id NOT IN (SELECT bridal_meeting_id FROM events WHERE bridal_meeting_id IS NOT NULL)').all();
         for (const meeting of pending) await createEventFromMeeting(meeting);
+        // Eventos de encontro criados antes com a inscrição fechada (ninguém tinha como fechar à mão): abre o link dos casais.
+        await db.prepare("UPDATE events SET registration_open = 1 WHERE bridal_meeting_id IS NOT NULL AND registration_open = 0 AND description LIKE 'Encontro de Noivos. Os casais%'").run();
       }
     })().catch(error => { schemaReady = undefined; console.error('Não foi possível preparar o esquema de eventos:', error.message); throw error; });
   }

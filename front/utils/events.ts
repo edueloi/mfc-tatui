@@ -112,8 +112,9 @@ export const ITEM_TEMPLATES: ItemTemplate[] = [
 
 /* ───────────── Convite ───────────── */
 
-export function inviteMessage(event: Pick<Event, 'name' | 'date' | 'startTime' | 'location' | 'hasFee' | 'ticketValue'>, link: string, recipient?: string) {
+export function inviteMessage(event: Pick<Event, 'name' | 'date' | 'startTime' | 'location' | 'hasFee' | 'ticketValue'> & { bridalMeetingId?: string | null }, link: string, recipient?: string) {
   const when = [dateLabel(event.date), event.startTime].filter(Boolean).join(' às ');
+  if (event.bridalMeetingId) return `${recipient ? `Olá, ${recipient.trim().split(/\s+/)[0]}! ` : 'Olá! '}Vocês estão convidados para o Encontro de Noivos do MFC ("${event.name}"), em ${when}${event.location ? `, no local: ${event.location}` : ''}. Preencham a ficha de inscrição do casal pelo link: ${link} 🙏`;
   const fee = event.hasFee !== false && Number(event.ticketValue) > 0 ? ` Valor: ${money(Number(event.ticketValue))} por pessoa.` : ' Participação sem taxa.';
   return `${recipient ? `Olá, ${recipient.trim().split(/\s+/)[0]}! ` : 'Olá! '}Você está convidado(a) para o evento "${event.name}" do MFC, em ${when}${event.location ? `, no local: ${event.location}` : ''}.${fee} Faça sua inscrição pelo link: ${link} 🙏`;
 }

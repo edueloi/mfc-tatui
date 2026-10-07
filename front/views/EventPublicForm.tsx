@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CalendarDays, CheckCircle2, Loader2, MapPin, Clock, Ticket, Ban } from 'lucide-react';
 import { api, photoSrc } from '../api';
+import toast from 'react-hot-toast';
 import { Button, ContentCard, EmptyState, Input } from '../components/ui';
+import { BridalCoupleForm } from '../components/BridalCoupleForm';
 import { dateLabel } from '../utils/dates';
 import { maskPhone, unmask } from '../utils/masks';
 import { money } from '../utils/events';
 
 interface PublicEvent {
   name: string; date: string; endDate: string; startTime: string; endTime: string; location: string; description: string; imageUrl: string;
-  kind: string; hasFee: boolean; ticketValue: number; registrationDeadline: string; spotsLeft: number | null; open: boolean; closedReason: string; past: boolean;
+  kind: string; bridal?: boolean; hasFee: boolean; ticketValue: number; registrationDeadline: string; spotsLeft: number | null; open: boolean; closedReason: string; past: boolean;
 }
 
 /** Página pública de inscrição (sem login): evento externo, aberta por link. */
@@ -23,6 +25,8 @@ const EventPublicForm: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [sent, setSent] = useState<{ name: string; amountDue: number } | null>(null);
   const [problem, setProblem] = useState('');
+  const [coupleSent, setCoupleSent] = useState<{ token: string; pixKey: string; noivoName: string; noivaName: string } | null>(null);
+  const [savingCouple, setSavingCouple] = useState(false);
   const savingRef = useRef(false);
 
   useEffect(() => {
@@ -50,6 +54,17 @@ const EventPublicForm: React.FC = () => {
     finally { savingRef.current = false; setSaving(false); }
   };
 
+  /** Inscrição do casal no Encontro de Noivos: a ficha completa (noivo, noiva e endereço) vira o cadastro do casal no encontro. */
+  const submitCouple = async (data: { noivo: object; noiva: object }) => {
+    if (!token || savingCouple) return;
+    setSavingCouple(true);
+    try {
+      const result = await api.registerPublicCouple(token, { noivo: data.noivo, noiva: data.noiva });
+      setCoupleSent({ token: result.couplePublicToken, pixKey: result.pixKey, noivoName: result.noivoName, noivaName: result.noivaName });
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível enviar a inscrição. Tente novamente.'); }
+    finally { setSavingCouple(false); }
+  };
+
   const shell = (children: React.ReactNode) => <main className="min-h-screen bg-slate-50 px-4 py-6 sm:py-10"><div className="mx-auto w-full max-w-xl space-y-4">{children}</div></main>;
 
   if (loading) return shell(<div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando…</div>);
@@ -65,13 +80,24 @@ const EventPublicForm: React.FC = () => {
           <li className="flex items-center gap-1.5"><CalendarDays size={13} className="text-slate-400" />{dateLabel(event.date)}{event.endDate && event.endDate !== event.date ? ` a ${dateLabel(event.endDate)}` : ''}</li>
           {(event.startTime || event.endTime) && <li className="flex items-center gap-1.5"><Clock size={13} className="text-slate-400" />{[event.startTime, event.endTime].filter(Boolean).join(' às ')}</li>}
           {event.location && <li className="flex items-center gap-1.5 break-words"><MapPin size={13} className="shrink-0 text-slate-400" />{event.location}</li>}
-          <li className="flex items-center gap-1.5"><Ticket size={13} className="text-slate-400" />{event.hasFee && event.ticketValue > 0 ? `${money(event.ticketValue)} por pessoa` : 'Participação sem taxa'}</li>
+          <li className="flex items-center gap-1.5"><Ticket size={13} className="text-slate-400" />{event.bridal ? 'Inscrição do casal (noivo e noiva)' : event.hasFee && event.ticketValue > 0 ? `${money(event.ticketValue)} por pessoa` : 'Participação sem taxa'}</li>
         </ul>
         {event.description && <p className="mt-3 whitespace-pre-line text-[13px] leading-relaxed text-slate-700">{event.description}</p>}
       </div>
     </ContentCard>
 
-    {sent ? <ContentCard padding="md"><div className="flex flex-col items-center gap-2 py-4 text-center">
+    {event.bridal && coupleSent ? <ContentCard padding="md"><div className="flex flex-col items-center gap-2 py-4 text-center">
+      <CheckCircle2 size={36} className="text-emerald-600" />
+      <h2 className="text-base font-semibold text-slate-900">Inscrição enviada!</h2>
+      <p className="text-sm text-slate-600">{coupleSent.noivoName} e {coupleSent.noivaName}, recebemos os dados de vocês. A organização do encontro entra em contato para combinar o pagamento.</p>
+      {coupleSent.pixKey && <p className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">Chave Pix do encontro: <strong className="break-all">{coupleSent.pixKey}</strong></p>}
+      <a href={`/noivos/form/${coupleSent.token}`} className="text-xs font-medium text-blue-700 underline">Enviar documentos ou corrigir os dados</a>
+    </div></ContentCard>
+      : event.bridal && event.open ? <ContentCard padding="md"><div className="space-y-3">
+        <div><h2 className="text-sm font-semibold text-slate-900">Ficha de inscrição do casal</h2><p className="mt-0.5 text-xs text-slate-500">Preencham os dados do noivo e da noiva. Leva poucos minutos.</p></div>
+        <BridalCoupleForm mode="public" hideDocuments saving={savingCouple} onSave={submitCouple} />
+      </div></ContentCard>
+      : sent ? <ContentCard padding="md"><div className="flex flex-col items-center gap-2 py-4 text-center">
       <CheckCircle2 size={36} className="text-emerald-600" />
       <h2 className="text-base font-semibold text-slate-900">Inscrição recebida, {sent.name.split(' ')[0]}!</h2>
       <p className="text-sm text-slate-600">{sent.amountDue > 0 ? `O valor de ${money(sent.amountDue)} é combinado com a organização do evento.` : 'Não há taxa para este evento.'} Qualquer dúvida, fale com quem convidou você.</p>

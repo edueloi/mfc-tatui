@@ -58,6 +58,8 @@ interface BridalCoupleFormProps {
   mode: 'internal' | 'public';
   /** "wizard": passo a passo (criação e formulário público). "tabs": abas livres com Salvar sempre visível (edição). */
   layout?: 'wizard' | 'tabs';
+  /** Sem o passo de documentos (inscrição nova pelo link: os documentos são enviados depois, na ficha já criada). */
+  hideDocuments?: boolean;
   /** Pré-seleciona o Encontro ao criar uma nova ficha de dentro de uma turma específica. */
   defaultEventId?: string | null;
   onSave: (data: BridalCoupleFormData) => Promise<void> | void;
@@ -209,6 +211,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   initialData,
   mode,
   layout = 'wizard',
+  hideDocuments = false,
   defaultEventId = null,
   onSave,
   onCancel,
@@ -218,7 +221,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   onRemoveDocument,
 }) => {
   const steps: Step[] = mode === 'public'
-    ? ['casal', 'endereco', 'documentos', 'revisao']
+    ? (hideDocuments ? ['casal', 'endereco', 'revisao'] : ['casal', 'endereco', 'documentos', 'revisao'])
     : layout === 'tabs' ? ['casal', 'endereco', 'pagamento', 'documentos']
     : ['casal', 'endereco', 'pagamento', 'documentos', 'revisao'];
 

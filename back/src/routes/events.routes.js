@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
 const { v4: uuid } = require('uuid');
+const { nowIso } = require('../utils/helpers');
 const { db } = require('../db-mysql');
 const { rowToEvent } = require('../models/converters');
 const { toInt, toBool } = require('../utils/helpers');
@@ -151,7 +152,11 @@ const loadEvents = async (onlyId) => {
 
 const occupiedPeople = async (eventId, exceptRegistrationId) => {
   const rows = await db.prepare('SELECT id, guests, status FROM event_registrations WHERE event_id = ?').all(eventId);
-  return rows.filter(row => row.id !== exceptRegistrationId && countsAsPerson(row)).reduce((sum, row) => sum + people(row), 0);
+  const base = rows.filter(row => row.id !== exceptRegistrationId && countsAsPerson(row)).reduce((sum, row) => sum + people(row), 0);
+  const event = await db.prepare('SELECT bridal_meeting_id FROM events WHERE id = ?').get(eventId);
+  if (!event?.bridal_meeting_id) return base;
+  const couples = await db.prepare("SELECT COUNT(*) AS total FROM bridal_couples WHERE event_id = ? AND status <> 'Cancelado'").get(event.bridal_meeting_id);
+  return base + (Number(couples?.total) || 0) * 2;
 };
 
 /** Mensagem de erro quando o evento não aceita novas inscrições; null se aceita. */
@@ -198,9 +203,11 @@ router.get('/public/:token', async (req, res) => {
     const closedReason = (event.event_kind || 'interno') !== 'externo' ? 'Este evento é interno e não aceita inscrição pelo link.' : await registrationBlocked(event, 1, { isPublic: true });
     res.json({
       name: event.name, date: event.date, endDate: event.end_date || '', startTime: event.start_time || '', endTime: event.end_time || '',
-      location: event.location || '', description: event.description || '', imageUrl: event.image_url || '', kind: event.event_kind || 'interno',
+      // O texto padrão do evento de encontro é uma nota interna (gastos e entradas): não aparece para o casal.
+      location: event.location || '', description: event.bridal_meeting_id && /^Encontro de Noivos\. Os casais/.test(event.description || '') ? '' : event.description || '', imageUrl: event.image_url || '', kind: event.event_kind || 'interno',
       hasFee: toBool(event.has_fee), ticketValue: num(event.ticket_value), registrationDeadline: event.registration_deadline || '',
       spotsLeft: event.capacity ? Math.max(0, Number(event.capacity) - occupied) : null, open: !closedReason, closedReason: closedReason || '', past: event.date < todayIso(),
+      bridal: !!event.bridal_meeting_id,
     });
   } catch (error) { res.status(500).json({ error: 'Erro ao buscar evento: ' + error.message }); }
 });
@@ -210,6 +217,7 @@ router.post('/public/:token/register', async (req, res) => {
     const event = await db.prepare('SELECT * FROM events WHERE public_token = ?').get(req.params.token);
     if (!event) return res.status(404).json({ error: 'Evento não encontrado.' });
     if ((event.event_kind || 'interno') !== 'externo') return res.status(422).json({ error: 'Este evento é interno e não aceita inscrição pelo link.' });
+    if (event.bridal_meeting_id) return res.status(422).json({ error: 'Este é um Encontro de Noivos: a inscrição é feita pela ficha do casal.' });
     const data = req.body || {};
     if (String(data.name || '').trim().length < 3) return res.status(400).json({ error: 'Informe seu nome completo.' });
     const phoneDigits = String(data.phone || '').replace(/\D/g, '');
@@ -225,6 +233,52 @@ router.post('/public/:token/register', async (req, res) => {
     await insertRegistration(row);
     res.status(201).json({ ok: true, name: row.name, amountDue: row.amountDue, hasFee: toBool(event.has_fee) });
   } catch (error) { res.status(500).json({ error: 'Erro ao registrar inscrição: ' + error.message }); }
+});
+
+/** Ficha de inscrição do casal (Encontro de Noivos): cria o casal com os dois noivos já ligado ao encontro. */
+const PARTNER_FIELDS = ['name', 'dob', 'profession', 'education', 'religion', 'parish', 'phone', 'email', 'street', 'number', 'neighborhood', 'zip', 'complement', 'city', 'state'];
+const text = (value, max = 255) => String(value || '').trim().slice(0, max);
+
+const checkPartner = (partner, who) => {
+  if (!partner || text(partner.name).length < 3) return `Informe o nome completo ${who}.`;
+  if (!validDate(partner.dob) || partner.dob > todayIso()) return `Informe a data de nascimento ${who}.`;
+  const digits = String(partner.phone || '').replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 11) return `Informe o telefone com DDD ${who}.`;
+  if (partner.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text(partner.email))) return `E-mail inválido ${who}.`;
+  if (!text(partner.street) || !text(partner.number) || !text(partner.city) || !text(partner.state)) return `Informe o endereço completo ${who} (rua, número, cidade e estado).`;
+  return null;
+};
+
+router.post('/public/:token/couple', async (req, res) => {
+  try {
+    const event = await db.prepare('SELECT * FROM events WHERE public_token = ?').get(req.params.token);
+    if (!event || !event.bridal_meeting_id) return res.status(404).json({ error: 'Encontro não encontrado.' });
+    const meeting = await db.prepare('SELECT * FROM bridal_meetings WHERE id = ?').get(event.bridal_meeting_id);
+    if (!meeting) return res.status(404).json({ error: 'Encontro não encontrado.' });
+    const problem = checkPartner(req.body?.noivo, 'do noivo') || checkPartner(req.body?.noiva, 'da noiva');
+    if (problem) return res.status(400).json({ error: problem });
+    const noivo = req.body.noivo, noiva = req.body.noiva;
+    const phones = [noivo.phone, noiva.phone].map(value => String(value).replace(/\D/g, ''));
+    if (phones[0] === phones[1]) return res.status(400).json({ error: 'Os telefones do noivo e da noiva precisam ser diferentes.' });
+    const existing = await db.prepare('SELECT p.phone FROM bridal_partners p JOIN bridal_couples c ON c.id = p.couple_id WHERE c.event_id = ? AND c.status <> ?').all(meeting.id, 'Cancelado');
+    if (existing.some(row => phones.includes(String(row.phone || '').replace(/\D/g, '')))) return res.status(409).json({ error: 'Já existe uma inscrição com este telefone neste encontro.' });
+    const blocked = await registrationBlocked(event, 2, { isPublic: true });
+    if (blocked) return res.status(422).json({ error: blocked });
+
+    const id = uuid(), token = uuid(), ts = nowIso();
+    await db.prepare(`
+      INSERT INTO bridal_couples (id, city_id, event_id, status, public_token, filled_externally, payment_status, payment_amount, payment_date, payment_method, payment_observation, created_at, updated_at)
+      VALUES (?, ?, ?, 'Aguardando Pagamento', ?, 1, 'Pendente', NULL, '', '', '', ?, ?)
+    `).run(id, meeting.city_id || null, meeting.id, token, ts, ts);
+    for (const [role, partner] of [['noivo', noivo], ['noiva', noiva]]) {
+      const values = Object.fromEntries(PARTNER_FIELDS.map(field => [field, text(field === 'phone' ? String(partner[field]).replace(/\D/g, '') : partner[field])]));
+      await db.prepare(`
+        INSERT INTO bridal_partners (id, couple_id, role, name, dob, profession, education, religion, parish, phone, email, street, number, neighborhood, zip, complement, city, state)
+        VALUES (@id, @coupleId, @role, @name, @dob, @profession, @education, @religion, @parish, @phone, @email, @street, @number, @neighborhood, @zip, @complement, @city, @state)
+      `).run({ ...values, id: uuid(), coupleId: id, role });
+    }
+    res.status(201).json({ ok: true, couplePublicToken: token, pixKey: meeting.pix_key || '', meetingName: meeting.name, noivoName: text(noivo.name), noivaName: text(noiva.name) });
+  } catch (error) { res.status(500).json({ error: 'Erro ao registrar a inscrição do casal: ' + error.message }); }
 });
 
 /* ───────────── Eventos ───────────── */

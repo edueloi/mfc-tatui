@@ -90,6 +90,7 @@ export const api = {
   updateEventRegistration: (id: string, data: any) => request(`/events/registrations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteEventRegistration: (id: string) => request(`/events/registrations/${id}`, { method: 'DELETE' }),
   getPublicEvent: (token: string) => request(`/events/public/${token}`),
+  registerPublicCouple: (token: string, data: any) => request(`/events/public/${token}/couple`, { method: 'POST', body: JSON.stringify(data) }),
   registerPublicEvent: (token: string, data: any) => request(`/events/public/${token}/register`, { method: 'POST', body: JSON.stringify(data) }),
 
   getEventSales: () => request('/event-sales'),
