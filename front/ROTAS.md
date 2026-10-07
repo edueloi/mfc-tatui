@@ -16,6 +16,7 @@ O sistema agora utiliza **React Router DOM** para gerenciar a navegação com UR
 | `/minha-equipe` | Minha Equipe (visão do membro) | MyTeam | TESOUREIRO, COORD_EQUIPE_BASE, USUARIO |
 | `/eventos` | Eventos e Metas | Events | ADMIN, COORD_CIDADE, COORD_ESTADO |
 | `/financeiro` | Tesouraria Equipes | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
+| `/financeiro/:teamSlug` | Tesouraria de uma equipe (ex.: `/financeiro/equipe-sao-jose?mes=7&ano=2026`) | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/livro-caixa` | Livro Caixa | GeneralLedger | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/usuarios` | Usuários do Sistema | UserManagement | ADMIN |
 | `/configuracoes` | Configurações do Sistema | Settings | ADMIN |

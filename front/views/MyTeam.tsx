@@ -73,6 +73,8 @@ import { cn } from '../src/lib/utils';
 import { monthlyAmountForMember, monthlyContributors } from '../utils/paymentRules';
 import { isPaidPayment, matchesReference, receivedInPeriod, monthlySettlement, formatPaymentDate, localDateToday, paidLate } from '../utils/paymentAccounting';
 import toast from 'react-hot-toast';
+import { FamilyPaymentModal } from '../components/FamilyPaymentModal';
+import type { BillingUnit } from '../utils/billingUnits';
 
 interface MyTeamViewProps {
   teamId: string;
@@ -96,7 +98,6 @@ const shortMonths = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out'
 const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>('familias');
-  const [showPayModal, setShowPayModal] = useState(false);
   const [showFamilyModal, setShowFamilyModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedFamily, setSelectedFamily] = useState<any>(null);
@@ -107,20 +108,7 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
 
-  const [selectedForPayment, setSelectedForPayment] = useState<{
-    memberIds: string[]; displayName: string; amountPerPerson: number; payingMembers: Member[];
-  } | null>(null);
-  const [paymentForm, setPaymentForm] = useState({
-    months: [] as number[], year: 2026, amountPerMonth: 50.00, observation: '', method: 'pix'
-  });
-  const [paymentDate, setPaymentDate] = useState(localDateToday);
-  const [isSavingPayment, setIsSavingPayment] = useState(false);
-  useEffect(() => {
-    if (showPayModal) {
-      setPaymentDate(localDateToday());
-      setPaymentForm(form => ({ ...form, months: [] }));
-    }
-  }, [showPayModal]);
+  const [payUnit, setPayUnit] = useState<BillingUnit | null>(null);
 
   const [membersState, setMembersState] = useState<Member[]>([]);
   const [team, setTeam] = useState<BaseTeam | null>(null);
@@ -243,19 +231,11 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
       .sort((a, b) => a.name.localeCompare(b.name)),
     [membersState, memberSearch, memberStatusFilter]);
 
-  const toggleMonthInForm = (mIdx: number) => {
-    if (!selectedForPayment) return;
-    const alreadyPaid = selectedForPayment.memberIds.length > 0 && selectedForPayment.memberIds.every(id =>
-      localPayments.some(p => p.memberId === id && isPaidPayment(p) && matchesReference(p, mIdx, paymentForm.year))
-    );
-    if (alreadyPaid) return;
-    setPaymentForm(prev => ({ ...prev, months: prev.months.includes(mIdx) ? prev.months.filter(m => m !== mIdx) : [...prev.months, mIdx] }));
-  };
-
-  const unpaidContributorsForMonth = (month: number, year: number) =>
-    selectedForPayment?.payingMembers.filter(member => !localPayments.some(payment =>
-      payment.memberId === member.id && isPaidPayment(payment) && matchesReference(payment, month, year)
-    )) || [];
+  const openPayment = (group: any) => setPayUnit({
+    key: group.familyName, familyName: group.familyName, displayName: group.displayName, type: group.type,
+    payingMembers: group.payingMembers, exemptMembers: group.members.filter((m: Member) => !group.payingMembers.includes(m)),
+    amountPerPerson: group.amountPerPerson, monthlyTotal: group.amountPerPerson * group.payingMembers.length,
+  });
 
   const handleSaveFamily = async () => {
     if (!editingFamily || !editingFamily.name || editingFamily.memberIds.length === 0) return;
@@ -282,46 +262,6 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
         loading: 'Salvando família...',
         success: 'Família atualizada com sucesso! ❤️',
         error: 'Erro ao salvar família.'
-      }
-    );
-  };
-
-  const handleLaunchMultiPayment = () => {
-    if (!selectedForPayment || paymentForm.months.length === 0 || !paymentDate || isSavingPayment) return;
-    const pays: Payment[] = [];
-    selectedForPayment.payingMembers.forEach(m => {
-      paymentForm.months.forEach(mIdx => {
-        if (localPayments.some(p => p.memberId === m.id && isPaidPayment(p) && matchesReference(p, mIdx, paymentForm.year))) return;
-        pays.push({ 
-          id: '', 
-          memberId: m.id, 
-          teamId, 
-          amount: selectedForPayment.amountPerPerson, 
-          date: paymentDate,
-          referenceMonth: `${mIdx}/${paymentForm.year}`, 
-          status: 'Pago', 
-          launchedBy: userId,
-          observation: paymentForm.observation,
-          method: paymentForm.method
-        });
-      });
-    });
-    
-    if (pays.length === 0) return;
-    setIsSavingPayment(true);
-
-    toast.promise(
-      Promise.all(pays.map(p => api.createPayment(p)))
-        .then((created: Payment[]) => { 
-          setLocalPayments(prev => [...created, ...prev]); 
-          setTimeout(loadData, 500); 
-          setShowPayModal(false); 
-          setPaymentForm({ months: [], year: 2026, amountPerMonth: 50, observation: '', method: 'pix' }); 
-        }).finally(() => { setIsSavingPayment(false); loadData(); }),
-      {
-        loading: 'Lançando pagamentos...',
-        success: 'Recebimento confirmado com sucesso! 💰',
-        error: 'Erro ao lançar pagamentos.'
       }
     );
   };
@@ -458,9 +398,7 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
                         iconLeft={<CreditCard className="w-3 h-3" />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setPaymentForm({ ...paymentForm, year: viewYear, months: [viewMonth], amountPerMonth: group.amountPerPerson, observation: '', method: 'pix' });
-                          setSelectedForPayment({ memberIds: group.payingMembers.map((m: Member) => m.id), displayName: group.displayName, amountPerPerson: group.amountPerPerson, payingMembers: group.payingMembers });
-                          setShowPayModal(true);
+                          openPayment(group);
                         }}
                       >
                         Lançar Recebimento
@@ -581,9 +519,7 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
                             className="w-7 h-7"
                             disabled={group.payingMembers.length === 0}
                             onClick={() => {
-                              setPaymentForm({ ...paymentForm, year: viewYear, months: [viewMonth], amountPerMonth: group.amountPerPerson, observation: '', method: 'pix' });
-                              setSelectedForPayment({ memberIds: group.payingMembers.map((m: Member) => m.id), displayName: group.displayName, amountPerPerson: group.amountPerPerson, payingMembers: group.payingMembers });
-                              setShowPayModal(true);
+                              openPayment(group);
                             }}
                           >
                              <Plus className="w-3.5 h-3.5" />
@@ -799,137 +735,14 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
           <Button variant="ghost" size="sm" onClick={() => setShowDetailModal(false)}>Fechar</Button>
           <Button variant="primary" size="sm" className="px-3" disabled={!selectedFamily?.payingMembers?.length} iconLeft={<CreditCard className="w-4 h-4" />} onClick={() => {
              if (!selectedFamily?.payingMembers?.length) return;
-             setPaymentForm({ ...paymentForm, year: viewYear, months: [viewMonth], amountPerMonth: selectedFamily.amountPerPerson, observation: '', method: 'pix' });
-             setSelectedForPayment({ memberIds: selectedFamily.payingMembers.map((m: Member) => m.id), displayName: selectedFamily.displayName, amountPerPerson: selectedFamily.amountPerPerson, payingMembers: selectedFamily.payingMembers });
-             setShowPayModal(true);
+             openPayment(selectedFamily);
           }}>Lançar Mensalidade</Button>
         </ModalFooter>
       </Modal>
 
-      {/* MODAL PAGAMENTO */}
-      <Modal
-        isOpen={showPayModal && !!selectedForPayment}
-        onClose={() => setShowPayModal(false)}
-        title="Confirmar Recebimento"
-        size="md"
-      >
-        {selectedForPayment && (
-          <div className="space-y-3">
-            <div className="pb-3 border-b border-slate-100 text-slate-800">
-               <div className="flex items-start justify-between relative">
-                  <div>
-                    <p className="text-xs text-slate-500 mb-0.5">Responsáveis</p>
-                    <h4 className="text-sm font-semibold">{selectedForPayment.displayName}</h4>
-                    <div className="flex gap-1 flex-wrap mt-2.5">
-                      {selectedForPayment.payingMembers.map((m: Member) => (
-                        <span key={m.id} className="text-xs text-slate-500">
-                          {m.nickname || m.name.split(' ')[0]}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500 mb-0.5">Por pessoa</p>
-                    <p className="text-sm font-semibold">R$ {selectedForPayment.amountPerPerson.toFixed(2)}</p>
-                  </div>
-               </div>
-            </div>
-
-            <div className="py-2 flex items-center justify-between">
-               <div>
-                  <p className="text-[11px] font-semibold text-slate-400 tracking-normal mb-0.5">Valor Total</p>
-                     <p className="text-base font-semibold text-slate-900">
-                     R$ {paymentForm.months.reduce((total, month) => total + (unpaidContributorsForMonth(month, paymentForm.year).length * selectedForPayment.amountPerPerson), 0).toFixed(2)}
-                   </p>
-               </div>
-               <Badge color="success" size="md" pill>
-                 {paymentForm.months.length} {paymentForm.months.length === 1 ? 'Mês' : 'Meses'}
-               </Badge>
-            </div>
-
-            <div className="space-y-3.5">
-              <Input label="Data do recebimento" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} hint="O dinheiro entra no caixa deste mês, mesmo ao pagar uma mensalidade antiga." />
-              <div className="flex items-center justify-between px-1">
-                <p className="text-[11px] font-semibold text-slate-400 tracking-normal">Mensalidades que estão sendo pagas</p>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={String(paymentForm.year)}
-                    onChange={e => setPaymentForm({ ...paymentForm, year: parseInt(e.target.value), months: [] })}
-                    options={[2024, 2025, 2026, 2027].map(y => ({ value: String(y), label: String(y) }))}
-                    size="sm"
-                    wrapperClassName="w-24"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-1.5">
-                {monthNames.map((_m, i) => {
-                  const mIdx = i + 1;
-                  const isSelected = paymentForm.months.includes(mIdx);
-                  const unpaidContributors = unpaidContributorsForMonth(mIdx, paymentForm.year);
-                  const isPaid = unpaidContributors.length === 0;
-                  const isPartiallyPaid = unpaidContributors.length > 0 && unpaidContributors.length < selectedForPayment.memberIds.length;
-                  const settlement = monthlySettlement(selectedForPayment.memberIds, localPayments, mIdx, paymentForm.year);
-                  return (
-                    <button 
-                      key={mIdx} 
-                      title={settlement.description}
-                      disabled={isPaid} 
-                      onClick={() => toggleMonthInForm(mIdx)}
-                      className={cn(
-                        "min-h-14 rounded-xl border transition-all flex flex-col items-center justify-center gap-0.5 text-[11px] font-semibold tracking-normal",
-                        settlement.status === 'late' ? "bg-amber-50 border-amber-300 text-amber-800" :
-                        isPaid ? "bg-emerald-50 border-emerald-100 text-emerald-600 cursor-not-allowed opacity-60" :
-                        isSelected ? "bg-blue-600 border-blue-600 text-white shadow-none shadow-blue-100" :
-                        isPartiallyPaid ? "bg-amber-50 border-amber-200 text-amber-700" :
-                        "bg-white border-slate-100 text-slate-400 hover:border-blue-300"
-                      )}
-                    >
-                      {shortMonths[i]}
-                      {(isPaid || isPartiallyPaid) && <span className="text-[11px] normal-case tracking-normal">{settlement.label}</span>}
-                       {isPaid ? <CheckCircle2 className="w-3 h-3" /> : isPartiallyPaid ? <Clock className="w-3 h-3" /> : isSelected ? <Check className="w-3 h-3" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-               <Select 
-                label="Forma"
-                value={paymentForm.method}
-                size="sm"
-                onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}
-                options={[
-                  { value: 'pix', label: 'Pix' },
-                  { value: 'cash', label: 'Dinheiro' },
-                  { value: 'card', label: 'Cartão' },
-                  { value: 'transfer', label: 'Transf.' }
-                ]}
-              />
-               <Input 
-                label="Obs."
-                placeholder="Opcional..."
-                size="sm"
-                value={paymentForm.observation}
-                onChange={e => setPaymentForm({...paymentForm, observation: e.target.value})}
-              />
-            </div>
-          </div>
-        )}
-        <ModalFooter>
-          <Button variant="ghost" size="sm" onClick={() => setShowPayModal(false)}>Cancelar</Button>
-          <Button 
-            variant="primary" 
-            size="sm"
-            loading={isSavingPayment}
-            disabled={!paymentDate || !paymentForm.months.some(month => unpaidContributorsForMonth(month, paymentForm.year).length > 0)} 
-            iconLeft={<Save className="w-4 h-4" />} 
-            onClick={handleLaunchMultiPayment}
-          >
-            Confirmar Recebimento
-          </Button>
-        </ModalFooter>
-      </Modal>
+      <FamilyPaymentModal isOpen={!!payUnit} onClose={() => setPayUnit(null)} unit={payUnit} teamId={teamId} userId={userId}
+        payments={localPayments} defaultMonth={viewMonth} defaultYear={viewYear}
+        onSaved={created => { setLocalPayments(prev => [...created, ...prev]); setTimeout(loadData, 500); }} />
 
       {/* MODAL GESTÃO FAMÍLIA */}
       <Modal

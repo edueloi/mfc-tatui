@@ -22,4 +22,4 @@ export function findTeamByParam<T extends Pick<BaseTeam, 'id' | 'name' | 'city'>
   return teams.find(team => teamSlug(team, teams) === param) || teams.find(team => team.id === param) || null;
 }
 
-export const teamPath = (team: Pick<BaseTeam, 'id' | 'name' | 'city'>, teams: Pick<BaseTeam, 'id' | 'name' | 'city'>[]) => `/equipes/${teamSlug(team, teams)}`;
+export const teamPath = (team: Pick<BaseTeam, 'id' | 'name' | 'city'>, teams: Pick<BaseTeam, 'id' | 'name' | 'city'>[], base = '/equipes') => `${base}/${teamSlug(team, teams)}`;

@@ -8,6 +8,7 @@ Referência extraída das telas já ajustadas:
 | Lançamentos | `views/DailyEntries.tsx` | páginas de **listagem + resumo** (KPIs, filtro, tabela, gráficos) |
 | Minha equipe | `views/MyTeam.tsx` | páginas **com várias abas** e cards em grade |
 | Equipes Base (lista + detalhe) | `views/Teams.tsx` + `views/TeamDetail.tsx` + `components/TeamFormModal.tsx` | **lista de cards** + detalhe com membros e resumo, URL por nome |
+| Tesouraria (lista + equipe) | `views/Finance.tsx` + `components/FamilyPaymentModal.tsx` + `utils/billingUnits.ts` | telas **financeiras** com ação de receber (modal de confirmação de valor) |
 | Relatórios | `views/Reports.tsx` | **painel de indicadores** (filtros de período, KPIs, abas Visão geral/Tabela) |
 | Criar/Editar MFCista | `views/MemberFormPage.tsx` + `components/MemberForm.tsx` | **formulários** de cadastro (mesma tela cria e edita) |
 
@@ -214,6 +215,17 @@ Usado em Equipes: `/equipes/equipe-sao-jose` em vez de `/equipes/t1`.
 - A tela de detalhe resolve a entidade pelo slug **ou pelo id** (links antigos continuam abrindo) e faz `navigate(path, { replace: true })` para a URL com nome. O mesmo vale depois de renomear.
 - Para outra entidade, copiar o par `slugify`/`find…ByParam` e seguir a mesma ideia.
 - Limitação: o slug vem do nome; se criarem outra equipe com o mesmo nome, o slug da primeira passa a incluir a cidade.
+
+## 8.2.1 Mesma entidade em outra rota
+
+A Tesouraria usa o mesmo slug em `/financeiro/:teamSlug` (`teamPath(team, teams, '/financeiro')`). Mês e ano ficam na query (`?mes=7&ano=2026`) para sobreviverem à navegação entre lista e equipe e poderem ser compartilhados; o botão Voltar preserva `search`.
+
+## 8.2.2 Receber mensalidade (regras)
+
+- **Unidade de cobrança** (`utils/billingUnits.ts`): família (titular + cônjuge pagam juntos) ou membro sem família. A tela mostra o valor da **unidade** (ex.: R$ 30,00) e, por contribuinte, a parte dele (R$ 15,00 cada no casal). Dependentes e isentos aparecem só como "Isentos: …", **sem botão de receber** (o backend também recusa com 422).
+- **Modal único** `FamilyPaymentModal`, usado em Minha equipe e na Tesouraria: mostra contribuintes, grade de meses, o **valor que está sendo recebido**, em que mês entra no caixa e quais mensalidades ficam quitadas; o botão traz o valor ("Confirmar R$ 90,00").
+- **Atraso**: o dinheiro entra no caixa do mês da **data do recebimento** (não pode ser futura). Meses anteriores ficam quitados como "Pago em atraso", mas **não** geram entrada no caixa deles. "Selecionar atrasadas" marca todos de uma vez.
+- Lançamentos parciais (um falhou) mantêm o modal aberto e o que já foi gravado fica bloqueado para não duplicar.
 
 ## 8.3 Conferir o formato da API antes de montar gráficos
 

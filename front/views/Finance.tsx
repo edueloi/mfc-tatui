@@ -1,394 +1,284 @@
-
-import React, { useState, useEffect } from 'react';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Users, 
-  Wallet, 
-  Search, 
-  Filter, 
-  ChevronRight, 
-  Calendar,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
-  ArrowLeft,
-  DollarSign,
-  Printer,
-  ChevronLeft
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Wallet, Clock, CheckCircle2, ArrowLeft, Layers, Users, Loader2, ArrowRight, HandCoins, ListChecks, ReceiptText, Baby } from 'lucide-react';
 import { api } from '../api';
-import { MemberStatus, Member, BaseTeam, Payment } from '../types';
-import { PageWrapper, SectionTitle, StatGrid, ContentCard, Button, IconButton, Input, Select } from '../components/ui';
-import { StatCard } from '../components/ui/StatCard';
-import { cn } from '../src/lib/utils';
-import { monthlyAmountForMember, monthlyContributors } from '../utils/paymentRules';
-import { isPaidPayment, matchesReference, receivedInPeriod, paidLate, formatPaymentDate } from '../utils/paymentAccounting';
+import { Member, BaseTeam, Payment } from '../types';
+import {
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch, FilterLineSegmented,
+  Select, Button, Badge, EmptyState, Tabs, GridTable, usePagination,
+} from '../components/ui';
+import { FamilyPaymentModal } from '../components/FamilyPaymentModal';
+import { BillingUnit, buildBillingUnits, overdueMonths } from '../utils/billingUnits';
+import { monthlyContributors } from '../utils/paymentRules';
+import { isPaidPayment, matchesReference, receivedInPeriod, paidLate, formatPaymentDate, monthlySettlement } from '../utils/paymentAccounting';
+import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { findTeamByParam, teamPath } from '../utils/teamSlug';
 
-interface FinanceViewProps {
-  cityId: string;
+interface FinanceViewProps { cityId: string; userId: string; }
+
+const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const shortMonths = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+interface Period { month: number; year: number; }
+
+/** Resumo de uma equipe na referência escolhida. Recebimentos de meses antigos não abatem a referência; só entram no caixa. */
+function teamSummary(team: BaseTeam, members: Member[], payments: Payment[], period: Period, monthlyAmount: number) {
+  const teamMembers = members.filter(member => member.teamId === team.id);
+  const units = buildBillingUnits(teamMembers, monthlyAmount);
+  const contributors = units.flatMap(unit => unit.payingMembers);
+  const refPayments = payments.filter(payment => payment.teamId === team.id && isPaidPayment(payment) && matchesReference(payment, period.month, period.year));
+  const paid = contributors.filter(member => refPayments.some(payment => payment.memberId === member.id)).length;
+  const open = units.reduce((sum, unit) => sum + unit.payingMembers.reduce((total, member) => {
+    const received = refPayments.filter(payment => payment.memberId === member.id).reduce((acc, payment) => acc + payment.amount, 0);
+    return total + Math.max(0, unit.amountPerPerson - received);
+  }, 0), 0);
+  const cash = payments.filter(payment => payment.teamId === team.id && receivedInPeriod(payment, period.year, period.month)).reduce((sum, payment) => sum + payment.amount, 0);
+  return { units, total: contributors.length, paid, open, cash, percent: contributors.length ? (paid / contributors.length) * 100 : 0 };
 }
 
-const FinanceView: React.FC<FinanceViewProps> = ({ cityId }) => {
-  const currentDate = new Date();
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+const FinanceView: React.FC<FinanceViewProps> = ({ userId }) => {
+  const navigate = useNavigate();
+  const { teamSlug } = useParams<{ teamSlug: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const now = new Date();
+  const month = Math.min(12, Math.max(1, Number(searchParams.get('mes')) || now.getMonth() + 1));
+  const year = Number(searchParams.get('ano')) || now.getFullYear();
+  const period: Period = { month, year };
+
   const [teams, setTeams] = useState<BaseTeam[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [defaultMonthlyAmount, setDefaultMonthlyAmount] = useState(30);
-
-  const loadData = () => {
-    api.getTeams().then(setTeams).catch(() => setTeams([]));
-    api.getMembers().then(setMembers).catch(() => setMembers([]));
-    api.getPayments().then(setPayments).catch(() => setPayments([]));
-    api.getFinancialConfig().then((config: any) => {
-      if (config && config.monthlyPaymentAmount) {
-        setDefaultMonthlyAmount(parseFloat(config.monthlyPaymentAmount));
-      }
-    }).catch(() => {});
-  };
+  const [monthlyAmount, setMonthlyAmount] = useState(30);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    loadData();
-
-    const handleFocus = () => loadData();
-    window.addEventListener('focus', handleFocus);
-    
-    const interval = setInterval(loadData, 30000);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      clearInterval(interval);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [teamItems, memberItems, paymentItems, config] = await Promise.all([api.getTeams(), api.getMembers(), api.getPayments(), api.getFinancialConfig().catch(() => null)]);
+        if (cancelled) return;
+        setTeams(teamItems); setMembers(memberItems); setPayments(paymentItems);
+        const amount = parseFloat(config?.monthlyPaymentAmount);
+        if (!Number.isNaN(amount) && amount > 0) setMonthlyAmount(amount);
+        setError(false);
+      } catch { if (!cancelled) setError(true); }
+      finally { if (!cancelled) setLoading(false); }
     };
-  }, []);
+    load();
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.removeEventListener('focus', load); };
+  }, [retry]);
 
-  const cityTeams = teams.filter(t => searchTerm === '' || t.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const team = useMemo(() => findTeamByParam(teams, teamSlug), [teams, teamSlug]);
 
-  const getTeamStats = (teamId: string) => {
-    const teamMembers = monthlyContributors(members.filter(m => m.teamId === teamId));
-    const teamPayments = payments.filter(p => {
-      if (p.teamId !== teamId || !teamMembers.some(member => member.id === p.memberId)) return false;
-      return isPaidPayment(p) && matchesReference(p, selectedMonth, selectedYear);
-    });
-    
-    const paidMembers = new Set(teamPayments.map(p => p.memberId));
-    const paidCount = paidMembers.size;
-    const totalAmount = payments.filter(p => p.teamId === teamId && receivedInPeriod(p, selectedYear, selectedMonth)).reduce((sum, p) => sum + p.amount, 0);
-    
-    return {
-      total: teamMembers.length,
-      paid: paidCount,
-      percent: teamMembers.length > 0 ? (paidCount / teamMembers.length) * 100 : 0,
-      amount: totalAmount
-    };
-  };
+  // Link por id (ou nome antigo) passa a mostrar o nome da equipe na URL.
+  useEffect(() => {
+    if (!team || !teamSlug) return;
+    const path = teamPath(team, teams, '/financeiro');
+    if (path !== `/financeiro/${teamSlug}`) navigate({ pathname: path, search: window.location.search }, { replace: true });
+  }, [team, teams, teamSlug, navigate]);
 
-  const calculateExpectedAmount = (activeMembers: Member[]) => {
-    const contributors = monthlyContributors(activeMembers);
-    return contributors.reduce((total, member) => total + monthlyAmountForMember(member, contributors, defaultMonthlyAmount), 0);
-  };
+  const setPeriod = (next: Partial<Period>) => setSearchParams(prev => {
+    const params = new URLSearchParams(prev);
+    params.set('mes', String(next.month ?? month));
+    params.set('ano', String(next.year ?? year));
+    return params;
+  }, { replace: true });
 
-  const allActiveMembers = monthlyContributors(members);
-  const allPayments = payments.filter(p => {
-    return isPaidPayment(p) && matchesReference(p, selectedMonth, selectedYear) && allActiveMembers.some(member => member.id === p.memberId);
-  });
-  
-  const cashReceipts = payments.filter(p => receivedInPeriod(p, selectedYear, selectedMonth));
-  const totalArrecadado = cashReceipts.reduce((sum, p) => sum + p.amount, 0);
-  const paidMembersSet = new Set(allPayments.map(p => p.memberId));
-  const totalPago = paidMembersSet.size;
-  const totalEsperado = calculateExpectedAmount(allActiveMembers);
-  // Recebimentos de meses antigos não abatem a dívida da referência selecionada.
-  const pendente = allActiveMembers.reduce((total, member) => {
-    const expected = monthlyAmountForMember(member, allActiveMembers, defaultMonthlyAmount);
-    const paid = allPayments.filter(p => p.memberId === member.id).reduce((sum, p) => sum + p.amount, 0);
-    return total + Math.max(0, expected - paid);
-  }, 0);
-  const equipesEmDia = cityTeams.filter(t => getTeamStats(t.id).percent === 100).length;
-  
-  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const summaryLabel = `${monthNames[month - 1]} de ${year}`;
+  const yearOptions = Array.from({ length: 5 }, (_, i) => String(now.getFullYear() - 3 + i)).map(value => ({ value, label: value }));
+  const selector = <div className="flex w-full items-center gap-2 sm:w-auto">
+    <Select aria-label="Mês de referência" size="sm" wrapperClassName="w-36" value={String(month)} onChange={event => setPeriod({ month: Number(event.target.value) })} options={monthNames.map((label, index) => ({ value: String(index + 1), label }))} />
+    <Select aria-label="Ano de referência" size="sm" wrapperClassName="w-24" value={String(year)} onChange={event => setPeriod({ year: Number(event.target.value) })} options={yearOptions} />
+  </div>;
 
-  const renderTeamList = () => (
-    <div className="space-y-6">
-      <StatGrid cols={3}>
-        <StatCard 
-          title="Recebido no mês"
-          value={`R$ ${totalArrecadado.toFixed(2)}`}
-          icon={Wallet}
-          color="info"
-          description={`Caixa de ${monthNames[selectedMonth - 1]}/${selectedYear}, incluindo atrasados`}
-        />
-        
-        <StatCard 
-          title="Em aberto da referência"
-          value={`R$ ${Math.max(0, pendente).toFixed(2)}`}
-          icon={Clock}
-          color="warning"
-          description={`Mensalidades de ${monthNames[selectedMonth - 1]}/${selectedYear}`}
-        />
+  if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando tesouraria…</div></PageWrapper>;
 
-        <StatCard 
-          title="Equipes em Dia"
-          value={`${equipesEmDia} / ${cityTeams.length}`}
-          icon={CheckCircle2}
-          color="success"
-          description={`${totalPago} responsáveis pagaram a referência selecionada`}
-        />
-      </StatGrid>
+  if (error) return <PageWrapper><ContentCard><EmptyState icon={Wallet} title="Não foi possível carregar a tesouraria" description="Confira a conexão e tente novamente."
+    action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
-      <ContentCard padding="none" className="overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Status das Equipes Base</h3>
-          <div className="flex items-center gap-3">
-            <Input 
-              iconLeft={<Search className="w-4 h-4 text-slate-400" />}
-              placeholder="Buscar equipe..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              wrapperClassName="w-full sm:w-64"
-            />
-            <IconButton variant="outline" className="border-slate-200">
-              <Printer className="w-5 h-5 text-slate-400" />
-            </IconButton>
-          </div>
-        </div>
+  if (teamSlug && !team) return <PageWrapper><ContentCard><EmptyState icon={Layers} title="Equipe não encontrada" description="A equipe pode ter sido removida ou o endereço está incorreto."
+    action={<Button variant="outline" onClick={() => navigate({ pathname: '/financeiro', search: window.location.search })}>Voltar para a tesouraria</Button>} /></ContentCard></PageWrapper>;
 
-        <div className="divide-y divide-slate-50">
-          {cityTeams.map(team => {
-            const stats = getTeamStats(team.id);
-            return (
-              <div 
-                key={team.id} 
-                onClick={() => setSelectedTeamId(team.id)}
-                className="p-6 flex flex-col md:flex-row md:items-center justify-between hover:bg-blue-50/30 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className={cn(
-                    "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm shadow-sm",
-                    stats.percent === 100 ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
-                  )}>
-                    {team.name.substring(0, 2)}
-                  </div>
-                  <div>
-                    <h4 className="font-black text-slate-900 group-hover:text-blue-700 transition-colors">{team.name}</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-1">
-                      <Users className="w-3 h-3" /> {stats.total} Responsáveis pela mensalidade
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 md:mt-0 md:px-12 flex-1 max-w-xs">
-                  <div className="flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-                    <span>arrecadação</span>
-                    <span>{stats.paid} / {stats.total}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full transition-all duration-500",
-                        stats.percent === 100 ? "bg-emerald-500" : stats.percent > 50 ? "bg-blue-500" : "bg-amber-500"
-                      )}
-                      style={{ width: `${stats.percent}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 md:mt-0 flex items-center gap-6">
-                  <div className="text-right">
-                    <p className={cn(
-                      "text-[10px] font-black uppercase tracking-widest",
-                      stats.percent === 100 ? "text-emerald-600" : "text-amber-600"
-                    )}>
-                      {stats.percent === 100 ? 'EM DIA' : 'PENDENTE'}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold">R$ {stats.amount.toFixed(2)} arrecadado</p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-slate-200 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </ContentCard>
-    </div>
-  );
-
-  const renderTeamDetail = () => {
-    const team = teams.find(t => t.id === selectedTeamId);
-    const teamMembers = monthlyContributors(members.filter(m => m.teamId === selectedTeamId));
-    
-    return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => setSelectedTeamId(null)}
-            iconLeft={<ChevronLeft className="w-4 h-4" />}
-          >
-            Voltar para lista de equipes
-          </Button>
-        </div>
-
-        <ContentCard>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">{team?.name}</h2>
-                <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-[10px] font-black rounded-lg uppercase tracking-widest border border-blue-100">Equipe Base</span>
-              </div>
-              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Lançamentos referentes ao mês de <strong>{monthNames[selectedMonth - 1]}/{selectedYear}</strong></p>
-            </div>
-            <div className="flex gap-3">
-              <Button iconLeft={<DollarSign className="w-4 h-4" />}>
-                Lançar Lote Completo
-              </Button>
-            </div>
-          </div>
-        </ContentCard>
-
-        <ContentCard padding="none" className="overflow-hidden">
-          <div className="overflow-x-auto no-scrollbar">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsável</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status Pagamento</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Lançamento</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
-                  <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {teamMembers.map(member => {
-                  const payment = payments.find(p => {
-                    if (p.memberId !== member.id) return false;
-                    return isPaidPayment(p) && matchesReference(p, selectedMonth, selectedYear);
-                  });
-                  
-                  const memberExpectedAmount = monthlyAmountForMember(member, teamMembers, defaultMonthlyAmount);
-                  
-                  const isPaid = !!payment;
-                  const paymentAmount = payment?.amount || memberExpectedAmount;
-                  const paymentDate = payment?.date ? formatPaymentDate(payment.date) : '---';
-                  
-                  return (
-                    <tr key={member.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-black text-xs uppercase">
-                            {member.name.substring(0, 1)}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-black text-slate-900">{member.name}</span>
-                              {member.relationshipType && member.relationshipType !== 'Titular' && (
-                                <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 uppercase tracking-widest border border-blue-100">
-                                  {member.relationshipType}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-0.5">
-                              {member.familyName && (
-                                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.15em]">
-                                  Família {member.familyName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-2">
-                          {isPaid ? (
-                            <span className={cn("flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest", paidLate(payment) ? 'text-amber-700' : 'text-emerald-500')}>
-                              <CheckCircle2 className="w-3.5 h-3.5" /> {paidLate(payment) ? 'Pago em atraso' : 'Pago'}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1.5 text-amber-500 text-[10px] font-black uppercase tracking-widest">
-                              <Clock className="w-3.5 h-3.5" /> Pendente
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-xs font-bold text-slate-400">
-                        {paymentDate}
-                      </td>
-                      <td className="px-8 py-5 text-sm font-black text-slate-900">
-                        R$ {paymentAmount.toFixed(2)}
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        {isPaid ? (
-                          <button className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors">Estornar</button>
-                        ) : (
-                          <Button variant="success" size="xs">
-                            Confirmar
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </ContentCard>
-      </div>
-    );
-  };
-
-  const selector = (
-    <div className="flex items-center gap-3">
-      <Select 
-        size="sm"
-        value={selectedMonth}
-        onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-        options={monthNames.map((month, index) => ({ value: index + 1, label: month }))}
-        wrapperClassName="w-32"
-      />
-      <Select 
-        size="sm"
-        value={selectedYear}
-        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-        options={[2024, 2025, 2026, 2027].map(year => ({ value: year, label: year.toString() }))}
-        wrapperClassName="w-24"
-      />
-    </div>
-  );
+  const common = { teams, members, payments, period, monthlyAmount, periodLabel: summaryLabel };
 
   return (
     <PageWrapper>
-      <SectionTitle 
-        title="Tesouraria Geral"
-        description="Gestão financeira de todas as Equipes Bases."
-        icon={Wallet}
-        action={selector}
-      />
-
-      {selectedTeamId ? renderTeamDetail() : renderTeamList()}
-      <ContentCard title={`Recebimentos de ${monthNames[selectedMonth - 1]}/${selectedYear}`} className="mt-6">
-        <p className="mb-4 text-xs text-slate-500">Valores que entraram no caixa neste mês. A referência informa qual mensalidade foi paga.</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead><tr className="text-slate-500 border-b"><th className="p-3">Responsável</th><th className="p-3">Mensalidade</th><th className="p-3">Recebido em</th><th className="p-3">Situação</th><th className="p-3 text-right">Valor</th></tr></thead>
-            <tbody>{cashReceipts.filter(p => !selectedTeamId || p.teamId === selectedTeamId).map(payment => (
-              <tr key={payment.id} className="border-b border-slate-100">
-                <td className="p-3">{payment.memberName || members.find(m => m.id === payment.memberId)?.name || 'Membro'}</td>
-                <td className="p-3">{payment.referenceMonth}</td>
-                <td className="p-3 whitespace-nowrap">{formatPaymentDate(payment.date)}</td>
-                <td className={cn('p-3', paidLate(payment) ? 'text-amber-700' : 'text-emerald-700')}>{paidLate(payment) ? 'Pago em atraso' : 'Pago'}</td>
-                <td className="p-3 text-right whitespace-nowrap">R$ {payment.amount.toFixed(2)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-          {!cashReceipts.some(p => !selectedTeamId || p.teamId === selectedTeamId) && <p className="py-6 text-sm text-slate-500">Nenhum recebimento neste período.</p>}
-        </div>
-      </ContentCard>
+      <div className="space-y-4">
+        {team
+          ? <TeamTreasury {...common} team={team} userId={userId} selector={selector} onBack={() => navigate({ pathname: '/financeiro', search: window.location.search })}
+              onSaved={created => setPayments(prev => [...created, ...prev])} reload={() => setRetry(value => value + 1)} />
+          : <TeamsOverview {...common} selector={selector} onOpen={item => navigate({ pathname: teamPath(item, teams, '/financeiro'), search: window.location.search })} />}
+      </div>
     </PageWrapper>
   );
+};
+
+interface CommonProps { teams: BaseTeam[]; members: Member[]; payments: Payment[]; period: Period; monthlyAmount: number; periodLabel: string; selector: React.ReactNode; }
+
+/* ───────────────────────────── Lista de equipes ───────────────────────────── */
+
+const TeamsOverview: React.FC<CommonProps & { onOpen: (team: BaseTeam) => void }> = ({ teams, members, payments, period, monthlyAmount, periodLabel, selector, onOpen }) => {
+  const [search, setSearch] = useState('');
+  const [tab, setTab] = useState<'equipes' | 'recebimentos'>('equipes');
+  const rows = useMemo(() => teams.map(team => ({ team, ...teamSummary(team, members, payments, period, monthlyAmount) })), [teams, members, payments, period, monthlyAmount]);
+  const query = normalizeDirectoryText(search);
+  const filtered = rows.filter(row => !query || normalizeDirectoryText(`${row.team.name} ${row.team.city}`).includes(query)).sort((a, b) => a.team.name.localeCompare(b.team.name, 'pt-BR'));
+  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(filtered, 15);
+
+  const cash = rows.reduce((sum, row) => sum + row.cash, 0);
+  const open = rows.reduce((sum, row) => sum + row.open, 0);
+  const upToDate = rows.filter(row => row.total > 0 && row.paid === row.total).length;
+  const withCharge = rows.filter(row => row.total > 0).length;
+  const paidResponsible = rows.reduce((sum, row) => sum + row.paid, 0);
+  const tabs = [{ id: 'equipes', label: 'Equipes', icon: Layers }, { id: 'recebimentos', label: 'Recebimentos', icon: ReceiptText }] as const;
+
+  return <>
+    <SectionTitle title="Tesouraria" icon={Wallet} description={`Mensalidades das equipes base · referência ${periodLabel}.`} action={selector} />
+    <StatGrid cols={3}>
+      <StatCard title="Recebido no mês" value={formatCurrency(cash)} icon={Wallet} color="info" description="Caixa do mês, incluindo mensalidades atrasadas" />
+      <StatCard title="Em aberto da referência" value={formatCurrency(open)} icon={Clock} color="warning" description={`Mensalidades de ${periodLabel}`} />
+      <StatCard title="Equipes em dia" value={`${upToDate} / ${withCharge}`} icon={CheckCircle2} color="success" description={`${paidResponsible} responsáveis pagaram a referência`} />
+    </StatGrid>
+    <Tabs<typeof tabs[number]['id']> items={tabs} value={tab} onChange={setTab} label="Seções da tesouraria">
+      {tab === 'equipes' && <div className="space-y-3">
+        <FilterLine>
+          <FilterLineSection grow><FilterLineSearch aria-label="Buscar equipe" value={search} onChange={setSearch} placeholder="Nome da equipe ou cidade…" /></FilterLineSection>
+          <FilterLineSection><span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'equipe' : 'equipes'}</span>{search && <Button variant="ghost" size="sm" onClick={() => setSearch('')}>Limpar busca</Button>}</FilterLineSection>
+        </FilterLine>
+        <ContentCard padding="none">
+          <GridTable<typeof rows[number]> data={paginatedData} keyExtractor={row => row.team.id} noDesktopCard onRowClick={row => onOpen(row.team)}
+            columns={[
+              { header: 'Equipe', render: row => <div className="flex items-center gap-2"><div><p className="text-xs font-medium text-slate-800 break-words">{row.team.name}</p><p className="mt-0.5 text-[11px] text-slate-500">{row.team.city} / {row.team.state}</p></div>{row.team.isYouth && <Badge size="sm" color="purple" icon={<Baby size={10} />}>Jovem</Badge>}</div> },
+              { header: 'Responsáveis', render: row => <span className="inline-flex items-center gap-1 text-xs text-slate-700"><Users size={12} className="text-slate-400" />{row.total}</span> },
+              { header: 'Arrecadação', render: row => row.total ? <div className="min-w-[120px]"><div className="mb-1 flex justify-between text-[11px] text-slate-500"><span>{row.paid} / {row.total}</span><span>{Math.round(row.percent)}%</span></div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${row.percent === 100 ? 'bg-emerald-500' : row.percent > 50 ? 'bg-blue-500' : 'bg-amber-500'}`} style={{ width: `${row.percent}%` }} /></div></div> : <span className="text-xs text-slate-400">—</span> },
+              { header: 'Situação', render: row => <Badge size="sm" dot color={!row.total ? 'default' : row.percent === 100 ? 'success' : 'warning'}>{!row.total ? 'Sem cobrança' : row.percent === 100 ? 'Em dia' : 'Pendente'}</Badge> },
+              { header: 'Recebido no mês', render: row => <span className="text-xs font-semibold tabular-nums text-slate-800 whitespace-nowrap">{formatCurrency(row.cash)}</span> },
+              { header: '', render: () => <ArrowRight size={14} className="text-slate-300" /> },
+            ]}
+            emptyMessage={<EmptyState icon={Layers} title="Nenhuma equipe encontrada" description={search ? 'Ajuste a busca para encontrar a equipe.' : 'Cadastre equipes para acompanhar a tesouraria.'} />}
+            pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+        </ContentCard>
+      </div>}
+      {tab === 'recebimentos' && <ReceiptsTable payments={payments.filter(payment => receivedInPeriod(payment, period.year, period.month))} members={members} teams={teams} showTeam periodLabel={periodLabel} />}
+    </Tabs>
+  </>;
+};
+
+/* ───────────────────────────── Tesouraria da equipe ───────────────────────────── */
+
+const TeamTreasury: React.FC<CommonProps & { team: BaseTeam; userId: string; onBack: () => void; onSaved: (created: Payment[]) => void; reload: () => void }> = ({
+  team, userId, members, payments, period, monthlyAmount, periodLabel, selector, onBack, onSaved, reload,
+}) => {
+  const [tab, setTab] = useState<'familias' | 'recebimentos'>('familias');
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [payUnit, setPayUnit] = useState<BillingUnit | null>(null);
+
+  const teamPayments = useMemo(() => payments.filter(payment => payment.teamId === team.id), [payments, team.id]);
+  const summary = useMemo(() => teamSummary(team, members, payments, period, monthlyAmount), [team, members, payments, period, monthlyAmount]);
+  const rows = useMemo(() => summary.units.map(unit => {
+    const ids = unit.payingMembers.map(member => member.id);
+    const settlement = monthlySettlement(ids, teamPayments, period.month, period.year);
+    const overdue = overdueMonths(unit, teamPayments, period.year, period.month);
+    const settled = settlement.status === 'paid' || settlement.status === 'late';
+    return { unit, settlement, overdue, settled, charged: ids.length > 0 };
+  }), [summary.units, teamPayments, period]);
+
+  const query = normalizeDirectoryText(search);
+  const filtered = rows.filter(row => (filter === 'all' || (filter === 'pending' ? row.charged && (!row.settled || row.overdue.length > 0) : row.charged && row.settled && !row.overdue.length))
+    && (!query || normalizeDirectoryText(`${row.unit.displayName} ${row.unit.familyName || ''} ${[...row.unit.payingMembers, ...row.unit.exemptMembers].map(member => member.name).join(' ')}`).includes(query)));
+  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(filtered, 15);
+
+  const chargedRows = rows.filter(row => row.charged);
+  const settledCount = chargedRows.filter(row => row.settled).length;
+  const tabs = [{ id: 'familias', label: 'Famílias', icon: ListChecks }, { id: 'recebimentos', label: 'Recebimentos', icon: ReceiptText }] as const;
+
+  return <>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={onBack}>Voltar para a tesouraria</Button>
+      {selector}
+    </div>
+
+    <ContentCard padding="md">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600"><Wallet size={24} /></div>
+        <div className="min-w-0">
+          <h1 className="text-base sm:text-lg font-semibold text-slate-900 break-words">{team.name}</h1>
+          <p className="mt-1 text-xs text-slate-500">{team.city} / {team.state} · Referência {periodLabel}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge color={team.isYouth ? 'purple' : 'info'} dot>{team.isYouth ? 'MFC Jovem' : 'Equipe base'}</Badge>
+            <span className="text-xs text-slate-500">Mensalidade {formatCurrency(monthlyAmount)} por família (casal divide entre os dois)</span>
+          </div>
+        </div>
+      </div>
+    </ContentCard>
+
+    <StatGrid cols={3}>
+      <StatCard title="Recebido no mês" value={formatCurrency(summary.cash)} icon={Wallet} color="info" description={`Caixa de ${periodLabel}`} />
+      <StatCard title="Em aberto da referência" value={formatCurrency(summary.open)} icon={Clock} color="warning" description={`Mensalidades de ${periodLabel}`} />
+      <StatCard title="Famílias em dia" value={`${settledCount} / ${chargedRows.length}`} icon={CheckCircle2} color="success" description={`${rows.length - chargedRows.length} sem cobrança`} />
+    </StatGrid>
+
+    <Tabs<typeof tabs[number]['id']> items={tabs} value={tab} onChange={setTab} label="Tesouraria da equipe">
+      {tab === 'familias' && <div className="space-y-3">
+        <FilterLine>
+          <FilterLineSection grow>
+            <FilterLineItem grow><FilterLineSearch aria-label="Buscar família ou membro" value={search} onChange={setSearch} placeholder="Família ou membro…" /></FilterLineItem>
+            <FilterLineItem><FilterLineSegmented value={filter} onChange={value => setFilter(String(value))} options={[{ value: 'all', label: 'Todas' }, { value: 'pending', label: 'Pendentes' }, { value: 'ok', label: 'Em dia' }]} /></FilterLineItem>
+          </FilterLineSection>
+          <FilterLineSection><span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'família' : 'famílias'}</span></FilterLineSection>
+        </FilterLine>
+        <ContentCard padding="none">
+          <GridTable<typeof rows[number]> data={paginatedData} keyExtractor={row => row.unit.key} noDesktopCard
+            columns={[
+              { header: 'Família / responsável', render: ({ unit }) => <div className="min-w-0"><p className="text-xs font-medium text-slate-800 break-words">{unit.displayName}</p>
+                <p className="mt-0.5 text-[11px] text-slate-500">{unit.type === 'couple' ? 'Casal · paga junto' : unit.payingMembers.length ? 'Individual' : 'Sem cobrança'}</p>
+                {unit.exemptMembers.length > 0 && <p className="mt-0.5 text-[11px] text-slate-400 break-words">Isentos: {unit.exemptMembers.map(member => member.nickname || member.name.split(' ')[0]).join(', ')}</p>}</div> },
+              { header: 'Contribuintes', render: ({ unit }) => unit.payingMembers.length ? <ul className="space-y-0.5">{unit.payingMembers.map(member => <li key={member.id} className="flex justify-between gap-3 text-xs text-slate-700"><span className="break-words">{member.nickname || member.name.split(' ')[0]}</span><span className="tabular-nums text-slate-500">{formatCurrency(unit.amountPerPerson)}</span></li>)}</ul> : <span className="text-xs text-slate-400">Nenhum</span> },
+              { header: `Referência ${shortMonths[period.month - 1]}`, render: ({ unit, settlement, charged }) => charged ? <div><Badge size="sm" dot color={settlement.status === 'paid' ? 'success' : settlement.status === 'late' ? 'warning' : settlement.status === 'partial' ? 'purple' : 'danger'}>{settlement.label}</Badge><p className="mt-1 text-[11px] tabular-nums text-slate-500">{formatCurrency(unit.monthlyTotal)}</p></div> : <Badge size="sm">Sem cobrança</Badge> },
+              { header: 'Atrasos', render: ({ overdue, charged }) => !charged ? <span className="text-xs text-slate-400">—</span> : overdue.length ? <span title={overdue.map(month => monthNames[month - 1]).join(', ')}><Badge size="sm" color="danger">{overdue.length} {overdue.length === 1 ? 'mês' : 'meses'}</Badge></span> : <span className="text-xs text-emerald-700">Nenhum</span> },
+              { header: 'Ação', render: ({ unit, settled, overdue, charged }) => !charged ? <span className="text-[11px] text-slate-400">Isento</span>
+                : <Button size="xs" variant={settled && !overdue.length ? 'outline' : 'primary'} iconLeft={<HandCoins size={12} />} onClick={() => setPayUnit(unit)}>{settled && !overdue.length ? 'Antecipar' : 'Receber'}</Button> },
+            ]}
+            emptyMessage={<EmptyState icon={Users} title="Nenhuma família encontrada" description={search || filter !== 'all' ? 'Ajuste a busca ou o filtro.' : 'Esta equipe ainda não tem membros ativos.'} />}
+            pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+        </ContentCard>
+      </div>}
+      {tab === 'recebimentos' && <ReceiptsTable payments={teamPayments.filter(payment => receivedInPeriod(payment, period.year, period.month))} members={members} periodLabel={periodLabel} />}
+    </Tabs>
+
+    <FamilyPaymentModal isOpen={!!payUnit} onClose={() => { setPayUnit(null); reload(); }} unit={payUnit} teamId={team.id} userId={userId}
+      payments={teamPayments} defaultMonth={period.month} defaultYear={period.year} onSaved={onSaved} />
+  </>;
+};
+
+/* ───────────────────────────── Recebimentos do mês ───────────────────────────── */
+
+const ReceiptsTable: React.FC<{ payments: Payment[]; members: Member[]; teams?: BaseTeam[]; showTeam?: boolean; periodLabel: string }> = ({ payments, members, teams = [], showTeam, periodLabel }) => {
+  const sorted = useMemo(() => [...payments].sort((a, b) => b.date.localeCompare(a.date)), [payments]);
+  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(sorted, 15);
+  const total = sorted.reduce((sum, payment) => sum + payment.amount, 0);
+  return <div className="space-y-3">
+    <p className="text-xs text-slate-500">Valores que entraram no caixa em {periodLabel}: <strong className="text-slate-800">{formatCurrency(total)}</strong>. A referência informa qual mensalidade foi quitada; mensalidades atrasadas contam no mês do recebimento.</p>
+    <ContentCard padding="none">
+      <GridTable<Payment> data={paginatedData} keyExtractor={payment => payment.id} noDesktopCard
+        columns={[
+          { header: 'Responsável', render: payment => <div><p className="text-xs font-medium text-slate-800 break-words">{payment.memberName || members.find(member => member.id === payment.memberId)?.name || 'Membro'}</p>
+            <p className="mt-0.5 text-[11px] text-slate-500">{showTeam ? teams.find(team => team.id === payment.teamId)?.name : payment.familyName}</p></div> },
+          { header: 'Mensalidade', render: payment => { const [m, y] = payment.referenceMonth.split('/').map(Number); return <span className="text-xs whitespace-nowrap text-slate-700">{shortMonths[m - 1] || m}/{y}</span>; } },
+          { header: 'Recebido em', render: payment => <span className="text-xs whitespace-nowrap text-slate-700">{formatPaymentDate(payment.date)}</span> },
+          { header: 'Situação', render: payment => <Badge size="sm" dot color={paidLate(payment) ? 'warning' : 'success'}>{paidLate(payment) ? 'Pago em atraso' : 'Pago'}</Badge> },
+          { header: 'Valor', render: payment => <span className="text-xs font-semibold tabular-nums whitespace-nowrap text-slate-800">{formatCurrency(payment.amount)}</span> },
+        ]}
+        emptyMessage={<EmptyState icon={ReceiptText} title="Nenhum recebimento neste período" description="Os recebimentos lançados neste mês aparecem aqui." />}
+        pagination={{ total: sorted.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+    </ContentCard>
+  </div>;
 };
 
 export default FinanceView;

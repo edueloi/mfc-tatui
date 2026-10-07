@@ -96,7 +96,8 @@ const App: React.FC = () => {
               <Route path="equipes/:teamSlug" element={<TeamDetail />} />
               <Route path="minha-equipe" element={<MyTeamView teamId={currentUser.teamId || 't1'} userId={currentUser.id} userRole={currentUser.role} />} />
               <Route path="eventos" element={<EventsView />} />
-              <Route path="financeiro" element={<FinanceView cityId={currentUser.cityId} />} />
+              <Route path="financeiro" element={<FinanceView cityId={currentUser.cityId} userId={currentUser.id} />} />
+              <Route path="financeiro/:teamSlug" element={<FinanceView cityId={currentUser.cityId} userId={currentUser.id} />} />
               <Route path="livro-caixa" element={<GeneralLedger />} />
               <Route path="lancamentos" element={<DailyEntries />} />
               <Route path="encontro-noivos" element={<EncontroNoivos />} />
