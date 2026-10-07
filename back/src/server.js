@@ -109,7 +109,10 @@ async function start() {
         })
         .on('error', (err) => {
           if (err.code === 'EADDRINUSE') {
-            console.log(`⚠️  Porta ${port} em uso, tentando ${port + 1}...`);
+            // Subir em outra porta em silêncio já causou confusão: o front continua falando com a porta antiga (a do outro processo).
+            console.warn(`\n⚠️  A porta ${port} já está em uso, provavelmente por um backend antigo ainda aberto.\n` +
+              `   Esta instância vai subir em ${port + 1}, mas o front usa VITE_API_URL (normalmente ${PORT}) e NÃO vai falar com ela.\n` +
+              `   Feche o processo antigo (PowerShell: Get-NetTCPConnection -LocalPort ${port} | Select OwningProcess; Stop-Process -Id <PID>) e reinicie.\n`);
             tryListen(port + 1);
           } else {
             console.error('❌ Erro ao iniciar servidor:', err);
