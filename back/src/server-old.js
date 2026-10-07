@@ -1,0 +1,839 @@
+const express = require('express');
+const cors = require('cors');
+const { v4: uuid } = require('uuid');
+const bcrypt = require('bcryptjs');
+const { db, initDatabase } = require('./db-mysql');
+
+const app = express();
+app.use(cors());
+app.use(express.json({ charset: 'utf-8' }));
+app.use(express.urlencoded({ extended: true, charset: 'utf-8' }));
+
+// Garantir que todas as respostas usem UTF-8
+app.use((req, res, next) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+
+const nowIso = () => new Date().toISOString();
+const calcYears = (dateString) => {
+  if (!dateString) return 0;
+  const today = new Date();
+  const d = new Date(dateString);
+  if (Number.isNaN(d.getTime())) return 0;
+  let years = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
+  return years;
+};
+
+const toBool = (value) => !!value;
+const toInt = (value) => (value ? 1 : 0);
+
+const rowToCity = (row) => ({
+  id: row.id,
+  name: row.name,
+  uf: row.uf,
+  mfcSince: row.mfc_since || undefined,
+  active: toBool(row.active)
+});
+
+const rowToUser = (row) => ({
+  id: row.id,
+  username: row.username,
+  email: row.email || '',
+  name: row.name,
+  cityId: row.city_id,
+  role: row.role,
+  teamId: row.team_id || undefined,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
+const rowToTeam = (row) => ({
+  id: row.id,
+  name: row.name,
+  city: row.city,
+  state: row.state,
+  isYouth: toBool(row.is_youth),
+  createdAt: row.created_at,
+  memberCount: row.member_count || 0
+});
+
+const rowToMember = (row) => ({
+  id: row.id,
+  name: row.name,
+  nickname: row.nickname || '',
+  dob: row.dob || '',
+  rg: row.rg || '',
+  cpf: row.cpf || '',
+  bloodType: row.blood_type || '',
+  gender: row.gender || '',
+  maritalStatus: row.marital_status || '',
+  spouseName: row.spouse_name || '',
+  spouseCpf: row.spouse_cpf || '',
+  marriageDate: row.marriage_date || '',
+  mfcDate: row.mfc_date || '',
+  phone: row.phone || '',
+  emergencyPhone: row.emergency_phone || '',
+  status: row.status || '',
+  teamId: row.team_id || undefined,
+  street: row.street || '',
+  number: row.number || '',
+  neighborhood: row.neighborhood || '',
+  zip: row.zip || '',
+  complement: row.complement || '',
+  city: row.city || '',
+  state: row.state || '',
+  condir: row.condir || '',
+  naturalness: row.naturalness || '',
+  father: row.father || '',
+  mother: row.mother || '',
+  smoker: toBool(row.smoker),
+  mobilityIssue: row.mobility_issue || '',
+  healthPlan: row.health_plan || '',
+  diet: row.diet || '',
+  medication: row.medication || '',
+  allergy: row.allergy || '',
+  pcd: toBool(row.pcd),
+  pcdDescription: row.pcd_description || '',
+  profession: row.profession || '',
+  religion: row.religion || '',
+  education: row.education || '',
+  movementRoles: row.movement_roles ? JSON.parse(row.movement_roles) : [],
+  createdAt: row.created_at || '',
+  updatedAt: row.updated_at || '',
+  isPaymentInactive: toBool(row.is_payment_inactive)
+});
+
+const rowToEvent = (row) => ({
+  id: row.id,
+  name: row.name,
+  date: row.date,
+  costValue: row.cost_value,
+  goalValue: row.goal_value,
+  cityId: row.city_id,
+  isActive: toBool(row.is_active),
+  showOnDashboard: toBool(row.show_on_dashboard),
+  ticketQuantity: row.ticket_quantity ?? undefined,
+  ticketValue: row.ticket_value ?? undefined,
+  expenses: [],
+  teamQuotas: []
+});
+
+const rowToEventSale = (row) => ({
+  id: row.id,
+  eventId: row.event_id,
+  teamId: row.team_id,
+  memberId: row.member_id,
+  buyerName: row.buyer_name,
+  amount: row.amount,
+  status: row.status,
+  date: row.date
+});
+
+const rowToPayment = (row) => ({
+  id: row.id,
+  memberId: row.member_id,
+  teamId: row.team_id,
+  amount: row.amount,
+  date: row.date,
+  referenceMonth: row.reference_month,
+  status: row.status,
+  launchedBy: row.launched_by
+});
+
+const rowToLedger = (row) => ({
+  id: row.id,
+  teamId: row.team_id,
+  type: row.type,
+  description: row.description,
+  amount: row.amount,
+  date: row.date,
+  category: row.category || '',
+  createdBy: row.created_by || ''
+});
+
+const rowToEntity = (row) => ({
+  id: row.id,
+  name: row.name,
+  year: row.year,
+  createdBy: row.created_by,
+  observations: row.observations || '',
+  initialBalance: row.initial_balance
+});
+
+app.get('/', async (req, res) => {
+  res.json({ ok: true, service: 'mfc-back' });
+});
+
+app.post('/auth/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Usuario e senha sao obrigatorios.' });
+  }
+
+  const userRow = await db.prepare('SELECT * FROM users WHERE lower(username) = lower(?) AND active = 1').get(username);
+  if (!userRow) {
+    return res.status(401).json({ error: 'Credenciais invalidas.' });
+  }
+
+  const cityRow = await db.prepare('SELECT * FROM cities WHERE id = ?').get(userRow.city_id);
+  if (!cityRow || !cityRow.active) {
+    return res.status(403).json({ error: 'Cidade inativa. Acesso bloqueado.' });
+  }
+
+  const isValid = bcrypt.compareSync(password, userRow.password_hash);
+  if (!isValid) {
+    return res.status(401).json({ error: 'Credenciais invalidas.' });
+  }
+
+  return res.json({ user: rowToUser(userRow) });
+});
+
+app.get('/cities', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM cities ORDER BY name').all();
+  res.json(rows.map(rowToCity));
+});
+
+app.post('/cities', async (req, res) => {
+  const { name, uf, mfcSince } = req.body || {};
+  if (!name || !uf) return res.status(400).json({ error: 'Nome e UF obrigatorios.' });
+  const id = uuid();
+  await db.prepare('INSERT INTO cities (id, name, uf, mfc_since, active) VALUES (?, ?, ?, ?, 1)')
+    .run(id, name.trim(), uf.trim(), mfcSince || null);
+  const row = await db.prepare('SELECT * FROM cities WHERE id = ?').get(id);
+  res.status(201).json(rowToCity(row));
+});
+
+app.put('/cities/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, uf, mfcSince } = req.body || {};
+  await db.prepare('UPDATE cities SET name = ?, uf = ?, mfc_since = ? WHERE id = ?')
+    .run(name, uf, mfcSince || null, id);
+  const row = await db.prepare('SELECT * FROM cities WHERE id = ?').get(id);
+  res.json(rowToCity(row));
+});
+
+app.patch('/cities/:id/active', async (req, res) => {
+  const { id } = req.params;
+  const { active } = req.body || {};
+  await db.prepare('UPDATE cities SET active = ? WHERE id = ?').run(toInt(active), id);
+  const row = await db.prepare('SELECT * FROM cities WHERE id = ?').get(id);
+  res.json(rowToCity(row));
+});
+
+app.delete('/cities/:id', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('DELETE FROM cities WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+app.get('/roles', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM roles ORDER BY name').all();
+  res.json(rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    isSystem: toBool(r.is_system),
+    permissions: JSON.parse(r.permissions_json)
+  })));
+});
+
+app.post('/roles', async (req, res) => {
+  const { name, permissions } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Nome obrigatorio.' });
+  const id = uuid();
+  await db.prepare('INSERT INTO roles (id, name, is_system, permissions_json) VALUES (?, ?, 0, ?)')
+    .run(id, name.trim(), JSON.stringify(permissions || {}));
+  const row = await db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+  res.status(201).json({ id: row.id, name: row.name, isSystem: toBool(row.is_system), permissions: JSON.parse(row.permissions_json) });
+});
+
+app.put('/roles/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, permissions } = req.body || {};
+  await db.prepare('UPDATE roles SET name = ?, permissions_json = ? WHERE id = ?')
+    .run(name, JSON.stringify(permissions || {}), id);
+  const row = await db.prepare('SELECT * FROM roles WHERE id = ?').get(id);
+  res.json({ id: row.id, name: row.name, isSystem: toBool(row.is_system), permissions: JSON.parse(row.permissions_json) });
+});
+
+app.delete('/roles/:id', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('DELETE FROM roles WHERE id = ? AND is_system = 0').run(id);
+  res.status(204).end();
+});
+
+app.get('/teams', async (req, res) => {
+  const rows = await db.prepare(`
+    SELECT t.*, (
+      SELECT COUNT(1) FROM members m WHERE m.team_id = t.id
+    ) AS member_count
+    FROM teams t
+    ORDER BY t.name
+  `).all();
+  res.json(rows.map(rowToTeam));
+});
+
+app.post('/teams', async (req, res) => {
+  const { name, city, state, isYouth } = req.body || {};
+  if (!name || !city || !state) return res.status(400).json({ error: 'Dados obrigatorios.' });
+  const id = uuid();
+  await db.prepare('INSERT INTO teams (id, name, city, state, is_youth, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, name.trim(), city.trim(), state.trim(), toInt(isYouth), nowIso());
+  const row = await db.prepare(`SELECT t.*, 0 AS member_count FROM teams t WHERE id = ?`).get(id);
+  res.status(201).json(rowToTeam(row));
+});
+
+app.delete('/teams/:id', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('DELETE FROM teams WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+app.get('/members', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM members ORDER BY name').all();
+  res.json(rows.map(rowToMember));
+});
+
+app.post('/members', async (req, res) => {
+  try {
+    const data = req.body || {};
+    const id = uuid();
+    const ts = nowIso();
+    const stmt = await db.prepare(`
+      INSERT INTO members (
+        id, name, nickname, dob, rg, cpf, blood_type, gender, marital_status,
+        spouse_name, spouse_cpf, marriage_date, mfc_date, phone, emergency_phone,
+        status, team_id, street, number, neighborhood, zip, complement, city, state,
+        condir, naturalness, father, mother, smoker, mobility_issue, health_plan, diet,
+        medication, allergy, pcd, pcd_description, profession, religion, education,
+        movement_roles, created_at, updated_at, is_payment_inactive
+      ) VALUES (
+        @id, @name, @nickname, @dob, @rg, @cpf, @bloodType, @gender, @maritalStatus,
+        @spouseName, @spouseCpf, @marriageDate, @mfcDate, @phone, @emergencyPhone,
+        @status, @teamId, @street, @number, @neighborhood, @zip, @complement, @city, @state,
+        @condir, @naturalness, @father, @mother, @smoker, @mobilityIssue, @healthPlan, @diet,
+        @medication, @allergy, @pcd, @pcdDescription, @profession, @religion, @education,
+        @movementRoles, @createdAt, @updatedAt, @isPaymentInactive
+      )
+    `);
+
+    await stmt.run({
+      id,
+      name: data.name || '',
+      nickname: data.nickname || '',
+      dob: data.dob || '',
+      rg: data.rg || '',
+      cpf: data.cpf || '',
+      bloodType: data.bloodType || '',
+      gender: data.gender || '',
+      maritalStatus: data.maritalStatus || '',
+      spouseName: data.spouseName || '',
+      spouseCpf: data.spouseCpf || '',
+      marriageDate: data.marriageDate || '',
+      mfcDate: data.mfcDate || '',
+      phone: data.phone || '',
+      emergencyPhone: data.emergencyPhone || '',
+      status: data.status || '',
+      teamId: data.teamId || null,
+      street: data.street || '',
+      number: data.number || '',
+      neighborhood: data.neighborhood || '',
+      zip: data.zip || '',
+      complement: data.complement || '',
+      city: data.city || '',
+      state: data.state || '',
+      condir: data.condir || '',
+      naturalness: data.naturalness || '',
+      father: data.father || '',
+      mother: data.mother || '',
+      smoker: toInt(data.smoker),
+      mobilityIssue: data.mobilityIssue || '',
+      healthPlan: data.healthPlan || '',
+      diet: data.diet || '',
+      medication: data.medication || '',
+      allergy: data.allergy || '',
+      pcd: toInt(data.pcd),
+      pcdDescription: data.pcdDescription || '',
+      profession: data.profession || '',
+      religion: data.religion || '',
+      education: data.education || '',
+      movementRoles: JSON.stringify(data.movementRoles || []),
+      createdAt: ts,
+      updatedAt: ts,
+      isPaymentInactive: toInt(data.isPaymentInactive)
+    });
+
+    const row = await db.prepare('SELECT * FROM members WHERE id = ?').get(id);
+    res.status(201).json(rowToMember(row));
+  } catch (error) {
+    console.error('Erro ao criar membro:', error);
+    res.status(500).json({ error: 'Erro ao criar membro: ' + error.message });
+  }
+});
+
+app.put('/members/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body || {};
+  const ts = nowIso();
+  await db.prepare(`
+    UPDATE members SET
+      name = @name,
+      nickname = @nickname,
+      dob = @dob,
+      rg = @rg,
+      cpf = @cpf,
+      blood_type = @bloodType,
+      gender = @gender,
+      marital_status = @maritalStatus,
+      spouse_name = @spouseName,
+      spouse_cpf = @spouseCpf,
+      marriage_date = @marriageDate,
+      mfc_date = @mfcDate,
+      phone = @phone,
+      emergency_phone = @emergencyPhone,
+      status = @status,
+      team_id = @teamId,
+      street = @street,
+      number = @number,
+      neighborhood = @neighborhood,
+      zip = @zip,
+      complement = @complement,
+      city = @city,
+      state = @state,
+      condir = @condir,
+      naturalness = @naturalness,
+      father = @father,
+      mother = @mother,
+      smoker = @smoker,
+      mobility_issue = @mobilityIssue,
+      health_plan = @healthPlan,
+      diet = @diet,
+      medication = @medication,
+      allergy = @allergy,
+      pcd = @pcd,
+      pcd_description = @pcdDescription,
+      profession = @profession,
+      religion = @religion,
+      education = @education,
+      movement_roles = @movementRoles,
+      updated_at = @updatedAt,
+      is_payment_inactive = @isPaymentInactive
+    WHERE id = @id
+  `).run({
+    id,
+    name: data.name || '',
+    nickname: data.nickname || '',
+    dob: data.dob || '',
+    rg: data.rg || '',
+    cpf: data.cpf || '',
+    bloodType: data.bloodType || '',
+    gender: data.gender || '',
+    maritalStatus: data.maritalStatus || '',
+    spouseName: data.spouseName || '',
+    spouseCpf: data.spouseCpf || '',
+    marriageDate: data.marriageDate || '',
+    mfcDate: data.mfcDate || '',
+    phone: data.phone || '',
+    emergencyPhone: data.emergencyPhone || '',
+    status: data.status || '',
+    teamId: data.teamId || null,
+    street: data.street || '',
+    number: data.number || '',
+    neighborhood: data.neighborhood || '',
+    zip: data.zip || '',
+    complement: data.complement || '',
+    city: data.city || '',
+    state: data.state || '',
+    condir: data.condir || '',
+    naturalness: data.naturalness || '',
+    father: data.father || '',
+    mother: data.mother || '',
+    smoker: toInt(data.smoker),
+    mobilityIssue: data.mobilityIssue || '',
+    healthPlan: data.healthPlan || '',
+    diet: data.diet || '',
+    medication: data.medication || '',
+    allergy: data.allergy || '',
+    pcd: toInt(data.pcd),
+    pcdDescription: data.pcdDescription || '',
+    profession: data.profession || '',
+    religion: data.religion || '',
+    education: data.education || '',
+    movementRoles: JSON.stringify(data.movementRoles || []),
+    updatedAt: ts,
+    isPaymentInactive: toInt(data.isPaymentInactive)
+  });
+
+  const row = await db.prepare('SELECT * FROM members WHERE id = ?').get(id);
+  res.json(rowToMember(row));
+});
+
+app.delete('/members/:id', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('DELETE FROM members WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+app.get('/users', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM users ORDER BY name').all();
+  res.json(rows.map(rowToUser));
+});
+
+app.post('/users', async (req, res) => {
+  const data = req.body || {};
+  if (!data.username || !data.password || !data.name || !data.cityId || !data.role) {
+    return res.status(400).json({ error: 'Dados obrigatorios.' });
+  }
+  const id = uuid();
+  const ts = nowIso();
+  const passwordHash = bcrypt.hashSync(data.password, 10);
+  await db.prepare(`
+    INSERT INTO users (id, username, email, name, city_id, role, team_id, password_hash, created_at, updated_at, active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(id, data.username.trim(), data.email || '', data.name.trim(), data.cityId, data.role, data.teamId || null, passwordHash, ts, ts);
+  const row = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  res.status(201).json(rowToUser(row));
+});
+
+app.put('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body || {};
+  const ts = nowIso();
+  await db.prepare(`
+    UPDATE users SET
+      username = @username,
+      email = @email,
+      name = @name,
+      city_id = @cityId,
+      role = @role,
+      team_id = @teamId,
+      updated_at = @updatedAt
+    WHERE id = @id
+  `).run({
+    id,
+    username: data.username,
+    email: data.email || '',
+    name: data.name,
+    cityId: data.cityId,
+    role: data.role,
+    teamId: data.teamId || null,
+    updatedAt: ts
+  });
+  const row = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  res.json(rowToUser(row));
+});
+
+app.delete('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+app.get('/events', async (req, res) => {
+  const eventRows = await db.prepare('SELECT * FROM events ORDER BY date DESC').all();
+  const events = eventRows.map(rowToEvent);
+
+  const expenseRows = await db.prepare('SELECT * FROM event_expenses').all();
+  const quotaRows = await db.prepare('SELECT * FROM event_team_quotas').all();
+
+  const expensesByEvent = {};
+  expenseRows.forEach(row => {
+    if (!expensesByEvent[row.event_id]) expensesByEvent[row.event_id] = [];
+    expensesByEvent[row.event_id].push({ id: row.id, description: row.description, amount: row.amount });
+  });
+
+  const quotasByEvent = {};
+  quotaRows.forEach(row => {
+    if (!quotasByEvent[row.event_id]) quotasByEvent[row.event_id] = [];
+    quotasByEvent[row.event_id].push({ teamId: row.team_id, quotaValue: row.quota_value });
+  });
+
+  const merged = events.map(ev => ({
+    ...ev,
+    expenses: expensesByEvent[ev.id] || [],
+    teamQuotas: quotasByEvent[ev.id] || []
+  }));
+
+  res.json(merged);
+});
+
+app.post('/events', async (req, res) => {
+  const data = req.body || {};
+  if (!data.name || !data.date || !data.cityId) {
+    return res.status(400).json({ error: 'Dados obrigatorios.' });
+  }
+  const id = uuid();
+  await db.prepare(`
+    INSERT INTO events (id, name, date, cost_value, goal_value, city_id, is_active, show_on_dashboard, ticket_quantity, ticket_value)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    data.name,
+    data.date,
+    data.costValue || 0,
+    data.goalValue || 0,
+    data.cityId,
+    toInt(data.isActive),
+    toInt(data.showOnDashboard),
+    data.ticketQuantity || null,
+    data.ticketValue || null
+  );
+
+  const expenses = Array.isArray(data.expenses) ? data.expenses : [];
+  const teamQuotas = Array.isArray(data.teamQuotas) ? data.teamQuotas : [];
+
+  const expStmt = await db.prepare('INSERT INTO event_expenses (id, event_id, description, amount) VALUES (?, ?, ?, ?)');
+  for (const exp of expenses) {
+    await expStmt.run(uuid(), id, exp.description || '', exp.amount || 0);
+  }
+
+  const quotaStmt = await db.prepare('INSERT INTO event_team_quotas (event_id, team_id, quota_value) VALUES (?, ?, ?)');
+  for (const q of teamQuotas) {
+    await quotaStmt.run(id, q.teamId, q.quotaValue || 0);
+  }
+
+  const row = await db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  res.status(201).json({ ...rowToEvent(row), expenses, teamQuotas });
+});
+
+app.put('/events/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body || {};
+  await db.prepare(`
+    UPDATE events SET
+      name = ?,
+      date = ?,
+      cost_value = ?,
+      goal_value = ?,
+      city_id = ?,
+      is_active = ?,
+      show_on_dashboard = ?,
+      ticket_quantity = ?,
+      ticket_value = ?
+    WHERE id = ?
+  `).run(
+    data.name,
+    data.date,
+    data.costValue || 0,
+    data.goalValue || 0,
+    data.cityId,
+    toInt(data.isActive),
+    toInt(data.showOnDashboard),
+    data.ticketQuantity || null,
+    data.ticketValue || null,
+    id
+  );
+
+  await db.prepare('DELETE FROM event_expenses WHERE event_id = ?').run(id);
+  await db.prepare('DELETE FROM event_team_quotas WHERE event_id = ?').run(id);
+
+  const expenses = Array.isArray(data.expenses) ? data.expenses : [];
+  const teamQuotas = Array.isArray(data.teamQuotas) ? data.teamQuotas : [];
+
+  const expStmt = await db.prepare('INSERT INTO event_expenses (id, event_id, description, amount) VALUES (?, ?, ?, ?)');
+  for (const exp of expenses) {
+    await expStmt.run(uuid(), id, exp.description || '', exp.amount || 0);
+  }
+
+  const quotaStmt = await db.prepare('INSERT INTO event_team_quotas (event_id, team_id, quota_value) VALUES (?, ?, ?)');
+  for (const q of teamQuotas) {
+    await quotaStmt.run(id, q.teamId, q.quotaValue || 0);
+  }
+
+  const row = await db.prepare('SELECT * FROM events WHERE id = ?').get(id);
+  res.json({ ...rowToEvent(row), expenses, teamQuotas });
+});
+
+app.get('/event-sales', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM event_sales ORDER BY date DESC').all();
+  res.json(rows.map(rowToEventSale));
+});
+
+app.post('/event-sales', async (req, res) => {
+  const data = req.body || {};
+  const id = uuid();
+  await db.prepare(`
+    INSERT INTO event_sales (id, event_id, team_id, member_id, buyer_name, amount, status, date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, data.eventId, data.teamId, data.memberId, data.buyerName || '', data.amount || 0, data.status || 'Pendente', data.date || nowIso().slice(0, 10));
+  const row = await db.prepare('SELECT * FROM event_sales WHERE id = ?').get(id);
+  res.status(201).json(rowToEventSale(row));
+});
+
+app.get('/payments', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM payments ORDER BY date DESC').all();
+  res.json(rows.map(rowToPayment));
+});
+
+app.post('/payments', async (req, res) => {
+  const data = req.body || {};
+  const id = uuid();
+  await db.prepare(`
+    INSERT INTO payments (id, member_id, team_id, amount, date, reference_month, status, launched_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, data.memberId, data.teamId, data.amount || 0, data.date || nowIso().slice(0, 10), data.referenceMonth || '', data.status || 'Pendente', data.launchedBy || '');
+  const row = await db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
+  res.status(201).json(rowToPayment(row));
+});
+
+app.get('/ledger', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM ledger_entries ORDER BY date DESC').all();
+  res.json(rows.map(rowToLedger));
+});
+
+app.post('/ledger', async (req, res) => {
+  const data = req.body || {};
+  const id = uuid();
+  await db.prepare(`
+    INSERT INTO ledger_entries (id, team_id, type, description, amount, date, category, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, data.teamId, data.type, data.description || '', data.amount || 0, data.date || nowIso().slice(0, 10), data.category || '', data.createdBy || '');
+  const row = await db.prepare('SELECT * FROM ledger_entries WHERE id = ?').get(id);
+  res.status(201).json(rowToLedger(row));
+});
+
+app.get('/ledger-entities', async (req, res) => {
+  const rows = await db.prepare('SELECT * FROM financial_entities ORDER BY year DESC, name').all();
+  res.json(rows.map(rowToEntity));
+});
+
+app.post('/ledger-entities', async (req, res) => {
+  const data = req.body || {};
+  if (!data.name || !data.year || data.initialBalance === undefined) {
+    return res.status(400).json({ error: 'Dados obrigatorios.' });
+  }
+  const id = uuid();
+  await db.prepare(`
+    INSERT INTO financial_entities (id, name, year, created_by, observations, initial_balance)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, data.name, data.year, data.createdBy || 'Admin', data.observations || '', data.initialBalance || 0);
+  const row = await db.prepare('SELECT * FROM financial_entities WHERE id = ?').get(id);
+  res.status(201).json(rowToEntity(row));
+});
+
+app.put('/ledger-entities/:id', async (req, res) => {
+  const { id } = req.params;
+  const data = req.body || {};
+  await db.prepare(`
+    UPDATE financial_entities SET
+      name = ?,
+      year = ?,
+      created_by = ?,
+      observations = ?,
+      initial_balance = ?
+    WHERE id = ?
+  `).run(data.name, data.year, data.createdBy || 'Admin', data.observations || '', data.initialBalance || 0, id);
+  const row = await db.prepare('SELECT * FROM financial_entities WHERE id = ?').get(id);
+  res.json(rowToEntity(row));
+});
+
+app.delete('/ledger-entities/:id', async (req, res) => {
+  const { id } = req.params;
+  await db.prepare('DELETE FROM financial_entities WHERE id = ?').run(id);
+  res.status(204).end();
+});
+
+app.get('/dashboard/summary', async (req, res) => {
+  const month = req.query.month || '01';
+  const year = req.query.year || new Date().getFullYear().toString();
+
+  const members = await db.prepare('SELECT * FROM members').all();
+  const teams = await db.prepare('SELECT * FROM teams').all();
+  const payments = await db.prepare('SELECT * FROM payments').all();
+
+  const totalMembers = members.length;
+  const male = members.filter(m => m.gender === 'Masculino').length;
+  const female = members.filter(m => m.gender === 'Feminino').length;
+  const teamsCount = teams.length;
+  const activeMembers = members.filter(m => m.status === 'Ativo').length;
+
+  let children = 0;
+  let youth = 0;
+  let adult = 0;
+  let elderly = 0;
+  members.forEach(m => {
+    const age = calcYears(m.dob);
+    if (age <= 12) children++;
+    else if (age <= 18) youth++;
+    else if (age <= 59) adult++;
+    else elderly++;
+  });
+
+  const reference = `${month}/${year}`;
+  const paid = payments.filter(p => p.reference_month === reference && p.status === 'Pago').length;
+  const pending = payments.filter(p => p.reference_month === reference && p.status === 'Pendente').length;
+
+  const pieData = [
+    { name: 'Em Dia (Mensalidade)', value: paid, color: '#059669' },
+    { name: 'Pendentes', value: pending, color: '#D97706' },
+    { name: 'Inativos', value: Math.max(totalMembers - paid - pending, 0), color: '#DC2626' }
+  ];
+
+  const barData = teams.map(team => {
+    const teamPayments = payments.filter(p => p.team_id === team.id && p.reference_month === reference);
+    const totalTeam = teamPayments.length;
+    const paidTeam = teamPayments.filter(p => p.status === 'Pago').length;
+    const value = totalTeam === 0 ? 0 : Math.round((paidTeam / totalTeam) * 100);
+    return { id: team.id, name: team.name, value };
+  });
+
+  const trendData = ['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => {
+    const ref = `${m}/${year}`;
+    const count = payments.filter(p => p.reference_month === ref && p.status === 'Pago').length;
+    return { name: m, value: count };
+  });
+
+  res.json({
+    stats: {
+      totalMembers,
+      teamsCount,
+      male,
+      female,
+      activeMembers,
+      children,
+      youth,
+      adult,
+      elderly
+    },
+    barData,
+    trendData,
+    pieData
+  });
+});
+
+// Fun��o ass�ncrona para iniciar o servidor
+async function start() {
+  try {
+    // Primeiro inicializa o banco de dados
+    await initDatabase();
+    
+    // Depois inicia o servidor
+    const PORT = parseInt(process.env.PORT) || 4000;
+    
+    const tryListen = (port) => {
+      const server = app.listen(port)
+        .on('listening', () => {
+          console.log(`? MFC back rodando em http://localhost:${port}`);
+        })
+        .on('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            console.log(`??  Porta ${port} em uso, tentando ${port + 1}...`);
+            tryListen(port + 1);
+          } else {
+            console.error('? Erro ao iniciar servidor:', err);
+            process.exit(1);
+          }
+        });
+    };
+    
+    tryListen(PORT);
+  } catch (error) {
+    console.error('? Erro ao iniciar aplica��o:', error);
+    process.exit(1);
+  }
+}
+
+// Iniciar aplica��o
+start();

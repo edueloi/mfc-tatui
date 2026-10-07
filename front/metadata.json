@@ -1,0 +1,7 @@
+{
+  "name": "MFC System - Gestão de Movimento",
+  "description": "Sistema completo para gestão de membros (MFCistas), equipes base, permissões e cidades com suporte multi-dispositivo.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

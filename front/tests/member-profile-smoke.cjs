@@ -1,0 +1,71 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const member = { id: 'profile-test', name: 'Ana Maria Silva', nickname: 'Ana', status: 'Ativo', teamId: 'team', city: 'Tatuí', state: 'SP', dob: '1990-02-10', mfcDate: '2020-03-01', phone: '5515999991234', profession: 'Professora', cpf: '12345678900', gender: 'Feminino', maritalStatus: 'Casado(a)', spouseName: 'João Silva', marriageDate: '2018-02-10', familyName: 'Silva', relationshipType: 'Titular', father: 'José', mother: 'Maria', allergy: 'Penicilina', pcd: true, pcdDescription: 'Descrição de teste', mobilityIssue: 'Mobilidade reduzida', movementRoles: ['Coordenadora'], street: 'Rua de exemplo', zip: '18270400', number: '10', createdAt: '2020-03-01T12:00:00Z' };
+    const couple = { id: 'couple-test', name: 'Casal Teste Nucleação', status: 'Aguardando', movementRoles: [] };
+    let fail = false;
+    await page.route('http://localhost:4000/**', route => {
+      assert.equal(route.request().method(), 'GET', 'Visualizar não pode alterar dados.');
+      const pathname = new URL(route.request().url()).pathname;
+      if (fail && pathname === '/members') return route.fulfill({ status: 503, json: { error: 'Falha simulada' } });
+      return route.fulfill({ json: pathname === '/members' ? [member, couple] : pathname === '/teams' ? [{ id: 'team', name: 'Equipe de teste' }] : [] });
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('mfc.currentUser', JSON.stringify({ id: 'test', name: 'Teste', role: 'Administrador' }));
+      window.open = (...args) => { window.lastOpenedUrl = args[0]; return null; };
+    });
+    await page.goto('http://localhost:3000/mfcistas/profile-test');
+    await page.getByRole('heading', { level: 1, name: member.name }).waitFor();
+    await page.getByText('10/02/1990', { exact: true }).waitFor();
+    await page.getByText('Professora', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'WhatsApp', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.lastOpenedUrl), 'https://wa.me/5515999991234');
+    const artifacts = path.join(__dirname, 'artifacts');
+    fs.mkdirSync(artifacts, { recursive: true });
+    await page.screenshot({ path: path.join(artifacts, 'profile-desktop.png'), animations: 'disabled' });
+    await page.getByRole('tab', { name: 'Família', exact: true }).click();
+    await page.getByText('João Silva', { exact: true }).waitFor();
+    await page.getByText('10/02/2018', { exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Saúde', exact: true }).click();
+    await page.getByText('Penicilina', { exact: true }).waitFor();
+    await page.getByText('Descrição de teste', { exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Endereço', exact: true }).click();
+    await page.getByText('18270-400', { exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Cargos', exact: true }).click();
+    await page.getByText('Coordenadora', { exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Cadastro', exact: true }).click();
+    await page.getByText('01/03/2020', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Redefinir Senha' }).count(), 0);
+    await page.keyboard.press('Home');
+    assert.equal(await page.getByRole('tab', { name: 'Perfil', exact: true }).getAttribute('aria-selected'), 'true');
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: path.join(artifacts, 'profile-mobile.png'), animations: 'disabled' });
+    await page.getByRole('button', { name: 'Editar cadastro', exact: true }).click();
+    await page.waitForURL('**/profile-test/editar');
+    await page.goto('http://localhost:3000/mfcistas/couple-test');
+    await page.getByRole('heading', { level: 1, name: couple.name }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'WhatsApp', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Ligar', exact: true }).isDisabled(), true);
+    await page.getByRole('tab', { name: 'Cargos', exact: true }).click();
+    await page.getByText('Nenhum cargo registrado.', { exact: true }).waitFor();
+    await page.goto('http://localhost:3000/mfcistas/missing');
+    await page.getByText('MFCista não encontrado', { exact: true }).waitFor();
+    fail = true;
+    await page.goto('http://localhost:3000/mfcistas/profile-test');
+    await page.getByText('Não foi possível carregar o cadastro', { exact: true }).waitFor();
+    fail = false;
+    await page.getByRole('button', { name: 'Tentar novamente' }).click();
+    await page.getByRole('heading', { level: 1, name: member.name }).waitFor();
+    assert.deepEqual(errors, []);
+    console.log('OK: perfil compacto, abas, família, contato, datas brasileiras, editar, dados ausentes, erro/retry, teclado e celular.');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

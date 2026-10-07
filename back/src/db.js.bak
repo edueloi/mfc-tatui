@@ -1,0 +1,19 @@
+﻿// TEMPORÁRIO: Banco em memória (sem better-sqlite3)
+// const Database = require('better-sqlite3');
+const bcrypt = require('bcryptjs');
+
+// Simulação de banco de dados em memória
+const db = {
+  prepare: (sql) => ({
+    run: () => ({ changes: 1 }),
+    get: () => null,
+    all: () => []
+  }),
+  exec: () => {},
+  pragma: () => {}
+};
+
+console.log('⚠️  Usando banco em memória temporário');
+console.log('👤 Login: admin / admin123');
+
+module.exports = { db };

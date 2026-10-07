@@ -1,0 +1,15 @@
+﻿node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.claude/
+front/dist/
+back/data/
+back/uploads/
+*.sqlite
+*.db
+*.tar.gz
+~$*.xlsx
+Lançamentos Diários MFC 2026.xlsx

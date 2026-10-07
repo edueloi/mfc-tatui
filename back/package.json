@@ -1,0 +1,22 @@
+{
+  "name": "mfc-back",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.4",
+    "express": "^4.19.2",
+    "multer": "^2.1.1",
+    "mysql2": "^3.16.3",
+    "node-fetch": "^2.7.0",
+    "uuid": "^9.0.1",
+    "xlsx": "^0.18.5"
+  }
+}
