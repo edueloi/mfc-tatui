@@ -1,765 +1,152 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarDays, Plus, Users, Wallet, Target, MapPin, Clock, Pencil, ArrowRight, ShoppingCart, Loader2, Ticket, ServerCrash, Heart } from 'lucide-react';
+import { api, photoSrc } from '../api';
+import { BaseTeam, Event, EventSale, Member } from '../types';
 import {
-  Ticket,
-  Plus,
-  Target,
-  TrendingUp,
-  Users,
-  Calendar,
-  Edit3,
-  Trash2,
-  ShoppingCart,
-  Receipt,
-  MapPin,
-  User,
-  DollarSign,
-} from 'lucide-react';
-import { api } from '../api';
-import { Event, EventExpense, BaseTeam, EventSale, Member } from '../types';
-import {
-  PageWrapper,
-  SectionTitle,
-  StatGrid,
-  StatCard,
-  ContentCard,
-  FilterLine,
-  FilterLineSection,
-  FilterLineSearch,
-  FilterLineItem,
-  Button,
-  Input,
-  Select,
-  Switch,
-  Modal,
-  ModalFooter,
-  ConfirmModal,
-  EmptyState,
-  Divider,
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, Badge, Select, EmptyState,
+  FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch, FilterLineSegmented,
 } from '../components/ui';
+import { EventSaleModal } from '../components/EventSaleModal';
+import { getCurrentUser } from '../src/lib/currentUser';
+import { dateLabel } from '../utils/dates';
+import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { EVENTS_BASE, canSellTickets, eventPath, eventStatus, money, percent, scopedTeamId } from '../utils/events';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = (n: number) => `R$ ${n.toFixed(2)}`;
-
-const isSalePaid = (status: string) => String(status || '').toLowerCase() === 'pago';
-
-// ── componente principal ──────────────────────────────────────────────────────
+const Bar: React.FC<{ value: number | null; tone?: string; label: string }> = ({ value, tone = 'bg-blue-600', label }) => (
+  <div role="progressbar" aria-label={label} aria-valuenow={value ?? 0} aria-valuemin={0} aria-valuemax={100} className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+    <div className={`h-full rounded-full transition-all ${tone}`} style={{ width: `${value ?? 0}%` }} />
+  </div>
+);
 
 const EventsView: React.FC = () => {
+  const navigate = useNavigate();
+  const me = getCurrentUser();
+  const scope = scopedTeamId(me);
+  const staff = scope === null;
+
   const [events, setEvents] = useState<Event[]>([]);
   const [teams, setTeams] = useState<BaseTeam[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [eventSales, setEventSales] = useState<EventSale[]>([]);
-
-  // modal evento
-  const [showModal, setShowModal] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'basic' | 'expenses' | 'goals'>('basic');
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-
-  // modal venda
-  const [showSaleModal, setShowSaleModal] = useState(false);
-  const [selectedEventForSale, setSelectedEventForSale] = useState<Event | null>(null);
-
-  // filtros
-  const [eventSearch, setEventSearch] = useState('');
-  const [eventStatusFilter, setEventStatusFilter] = useState('all');
-  const [eventSortBy, setEventSortBy] = useState('date');
-
-  const [formData, setFormData] = useState({
-    name: '',
-    date: new Date().toISOString().split('T')[0],
-    location: '',
-    description: '',
-    responsible: '',
-    goalValue: 0,
-    showOnDashboard: true,
-    ticketQuantity: 0,
-    ticketValue: 0,
-    expenses: [] as EventExpense[],
-    teamQuotas: [] as { teamId: string; quotaValue: number }[],
-  });
-
-  const [saleForm, setSaleForm] = useState({
-    teamId: '',
-    memberId: '',
-    buyerName: '',
-    quantity: 1,
-    amount: 0,
-    date: new Date().toISOString().split('T')[0],
-    status: 'Pago' as 'Pago' | 'Pendente',
-  });
-
-  const [newExpense, setNewExpense] = useState({ description: '', amount: 0 });
-
-  // ── data ──────────────────────────────────────────────────────────────────
-
-  const loadData = () => {
-    api.getEvents().then(setEvents).catch(() => setEvents([]));
-    api.getTeams().then(setTeams).catch(() => setTeams([]));
-    api.getMembers().then(setMembers).catch(() => setMembers([]));
-    api.getEventSales().then(setEventSales).catch(() => setEventSales([]));
-  };
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [search, setSearch] = useState('');
+  const [phase, setPhase] = useState('upcoming');
+  const [kind, setKind] = useState('all');
+  const [saleEvent, setSaleEvent] = useState<Event | null>(null);
+  const [outdated, setOutdated] = useState(false);
 
   useEffect(() => {
-    loadData();
-    window.addEventListener('focus', loadData);
-    const iv = setInterval(loadData, 30000);
-    return () => { window.removeEventListener('focus', loadData); clearInterval(iv); };
-  }, []);
+    let cancelled = false;
+    const load = () => Promise.all([api.getEvents(), api.getTeams(), api.getMembers().catch(() => [])])
+      .then(([eventItems, teamItems, memberItems]) => { if (!cancelled) { setEvents(eventItems); setTeams(teamItems); setMembers(memberItems); setError(false); setOutdated(eventItems.length > 0 && !eventItems[0].stats); } })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    load();
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.removeEventListener('focus', load); };
+  }, [retry]);
 
-  useEffect(() => {
-    if (teams.length > 0 && formData.teamQuotas.length === 0) {
-      setFormData(prev => ({
-        ...prev,
-        teamQuotas: teams.map(t => ({ teamId: t.id, quotaValue: 0 })),
-      }));
-    }
-  }, [teams]);
+  const rows = useMemo(() => events.map(event => ({ event, status: eventStatus(event) })), [events]);
+  const query = normalizeDirectoryText(search);
+  const filtered = useMemo(() => rows
+    .filter(({ event, status }) => (phase === 'all' || (phase === 'upcoming' ? status.phase === 'em-breve' || status.phase === 'hoje' : phase === 'done' ? status.phase === 'realizado' || status.phase === 'encerrado' : status.phase === 'cancelado'))
+      && (kind === 'all' || (event.kind || 'interno') === kind) && (!query || normalizeDirectoryText(`${event.name} ${event.location || ''}`).includes(query)))
+    .sort((a, b) => phase === 'upcoming' ? a.event.date.localeCompare(b.event.date) : b.event.date.localeCompare(a.event.date)), [rows, phase, kind, query]);
 
-  // ── computed ──────────────────────────────────────────────────────────────
+  const counts = useMemo(() => ({
+    upcoming: rows.filter(({ status }) => status.phase === 'em-breve' || status.phase === 'hoje').length,
+    done: rows.filter(({ status }) => status.phase === 'realizado' || status.phase === 'encerrado').length,
+    cancelled: rows.filter(({ status }) => status.phase === 'cancelado').length,
+  }), [rows]);
+  const upcoming = rows.filter(({ status }) => status.phase === 'em-breve' || status.phase === 'hoje');
+  const registered = upcoming.reduce((sum, { event }) => sum + (event.stats?.registered || 0), 0);
+  const raised = filtered.reduce((sum, { event }) => sum + (event.stats?.raised || 0), 0);
+  const goal = filtered.reduce((sum, { event }) => sum + (event.hasFee !== false ? Number(event.goalValue) || 0 : 0), 0);
+  const hasFilter = !!query || kind !== 'all' || phase !== 'upcoming';
 
-  const teamMembersForSale = useMemo(() => {
-    if (!saleForm.teamId) return [];
-    return members.filter(m => m.teamId === saleForm.teamId);
-  }, [members, saleForm.teamId]);
-
-  useEffect(() => {
-    if (teamMembersForSale.length > 0 && !teamMembersForSale.some(m => m.id === saleForm.memberId)) {
-      setSaleForm(prev => ({ ...prev, memberId: teamMembersForSale[0].id }));
-    }
-  }, [teamMembersForSale]);
-
-  const totalExpenses = formData.expenses.reduce((acc, exp) => acc + exp.amount, 0);
-  const potentialRevenue = (formData.ticketQuantity || 0) * (formData.ticketValue || 0);
-
-  const getEventStats = (event: Event) => {
-    const sales = eventSales.filter(s => s.eventId === event.id);
-    const paidSales = sales.filter(s => isSalePaid(s.status));
-    const raised = paidSales.reduce((acc, s) => acc + s.amount, 0);
-    const progress = event.goalValue > 0 ? (raised / event.goalValue) * 100 : 0;
-    const netProfit = raised - event.costValue;
-    const ticketsSold = paidSales.length;
-    const totalTickets = Number(event.ticketQuantity) || 0;
-    const ticketsRemaining = totalTickets > 0 ? Math.max(totalTickets - ticketsSold, 0) : null;
-    return { raised, progress, netProfit, ticketsSold, totalTickets, ticketsRemaining };
-  };
-
-  const filteredEvents = useMemo(() => {
-    return events
-      .filter(e => e.name.toLowerCase().includes(eventSearch.toLowerCase()))
-      .filter(e => {
-        if (eventStatusFilter === 'active') return e.isActive;
-        if (eventStatusFilter === 'closed') return !e.isActive;
-        return true;
-      })
-      .sort((a, b) => {
-        if (eventSortBy === 'name') return a.name.localeCompare(b.name);
-        if (eventSortBy === 'progress') return getEventStats(b).progress - getEventStats(a).progress;
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      });
-  }, [events, eventSearch, eventStatusFilter, eventSortBy, eventSales]);
-
-  const globalStats = useMemo(() => {
-    return filteredEvents.reduce((acc, event) => {
-      const stats = getEventStats(event);
-      acc.raised += stats.raised;
-      acc.goal += Number(event.goalValue) || 0;
-      acc.net += stats.netProfit;
-      return acc;
-    }, { raised: 0, goal: 0, net: 0 });
-  }, [filteredEvents, eventSales]);
-
-  // ── actions ───────────────────────────────────────────────────────────────
-
-  const openNewModal = () => {
-    setEditingEventId(null);
-    setActiveTab('basic');
-    setFormData({
-      name: '', date: new Date().toISOString().split('T')[0], location: '',
-      description: '', responsible: '', goalValue: 0, showOnDashboard: true,
-      ticketQuantity: 0, ticketValue: 0, expenses: [], teamQuotas: [],
-    });
-    setShowModal(true);
-  };
-
-  const handleEditEvent = (event: Event) => {
-    setEditingEventId(event.id);
-    setActiveTab('basic');
-    setFormData({
-      name: event.name, date: event.date,
-      location: (event as any).location || '', description: (event as any).description || '',
-      responsible: (event as any).responsible || '', goalValue: Number(event.goalValue) || 0,
-      showOnDashboard: Boolean(event.showOnDashboard),
-      ticketQuantity: Number(event.ticketQuantity) || 0, ticketValue: Number(event.ticketValue) || 0,
-      expenses: event.expenses || [],
-      teamQuotas: event.teamQuotas || teams.map(t => ({ teamId: t.id, quotaValue: 0 })),
-    });
-    setShowModal(true);
-  };
-
-  const handleSave = () => {
-    const payload: Event = {
-      id: editingEventId || '', ...formData, costValue: totalExpenses, cityId: '1', isActive: true,
-    } as Event;
-    if (editingEventId) {
-      api.updateEvent(editingEventId, payload)
-        .then((updated: Event) => { setEvents(events.map(e => e.id === updated.id ? updated : e)); setTimeout(loadData, 500); })
-        .catch(console.error);
-    } else {
-      api.createEvent(payload)
-        .then((created: Event) => { setEvents([created, ...events]); setTimeout(loadData, 500); })
-        .catch(console.error);
-    }
-    setShowModal(false);
-    setEditingEventId(null);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (!deleteConfirmId) return;
-    api.updateEvent(deleteConfirmId, { isActive: false })
-      .then(() => loadData())
-      .catch(console.error)
-      .finally(() => setDeleteConfirmId(null));
-  };
-
-  const handleOpenSaleModal = (event: Event) => {
-    const defaultTeam = teams[0];
-    const defaultMember = members.find(m => m.teamId === defaultTeam?.id);
-    setSelectedEventForSale(event);
-    setSaleForm({
-      teamId: defaultTeam?.id || '', memberId: defaultMember?.id || '',
-      buyerName: '', quantity: 1, amount: Number(event.ticketValue) || 0,
-      date: new Date().toISOString().split('T')[0], status: 'Pago',
-    });
-    setShowSaleModal(true);
-  };
-
-  const handleCreateSale = async () => {
-    if (!selectedEventForSale || !saleForm.teamId || !saleForm.memberId) return;
-    if (saleForm.quantity <= 0 || saleForm.amount < 0) return;
-    try {
-      await Promise.all(
-        Array.from({ length: saleForm.quantity }).map(() =>
-          api.createEventSale({
-            eventId: selectedEventForSale.id, teamId: saleForm.teamId,
-            memberId: saleForm.memberId, buyerName: saleForm.buyerName || 'Ingressos avulsos',
-            amount: saleForm.amount, status: saleForm.status, date: saleForm.date,
-          })
-        )
-      );
-      loadData();
-      setShowSaleModal(false);
-      setSelectedEventForSale(null);
-    } catch (e) {
-      console.error('Erro ao registrar venda:', e);
-    }
-  };
-
-  const handleAddExpense = () => {
-    if (!newExpense.description || newExpense.amount <= 0) return;
-    setFormData({
-      ...formData,
-      expenses: [...formData.expenses, { id: Math.random().toString(36).substr(2, 9), ...newExpense }],
-    });
-    setNewExpense({ description: '', amount: 0 });
-  };
-
-  // ── select options ────────────────────────────────────────────────────────
-
-  const teamSelectOptions = [
-    { value: 'all', label: 'Todas' },
-    ...teams.map(t => ({ value: t.id, label: t.name })),
-  ];
-
-  const statusFilterOptions = [
-    { value: 'all', label: 'Todos' },
-    { value: 'active', label: 'Ativos' },
-    { value: 'closed', label: 'Finalizados' },
-  ];
-
-  const sortOptions = [
-    { value: 'date', label: 'Mais recentes' },
-    { value: 'progress', label: 'Maior progresso' },
-    { value: 'name', label: 'Nome A-Z' },
-  ];
-
-  const MODAL_TABS = [
-    { id: 'basic', label: 'Dados básicos' },
-    { id: 'expenses', label: 'Gastos' },
-    { id: 'goals', label: 'Metas' },
-  ] as const;
-
-  // ── render ────────────────────────────────────────────────────────────────
+  if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando eventos…</div></PageWrapper>;
+  if (outdated) return <PageWrapper><ContentCard><EmptyState icon={ServerCrash} title="O servidor ainda está na versão antiga" description="Os eventos novos precisam do backend atualizado. Reinicie o servidor (backend) e atualize esta página."
+    action={<Button onClick={() => { setLoading(true); setOutdated(false); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
+  if (error && !events.length) return <PageWrapper><ContentCard><EmptyState icon={CalendarDays} title="Não foi possível carregar os eventos" description="Confira a conexão e tente novamente."
+    action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
   return (
     <PageWrapper>
-      <div className="space-y-6">
+      <div className="space-y-4">
+        <SectionTitle title="Eventos" icon={Ticket} description="Eventos internos e externos, inscrições, metas e itens."
+          action={staff ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => navigate(`${EVENTS_BASE}/novo`)}>Novo evento</Button> : undefined} />
 
-        {/* Header */}
-        <SectionTitle
-          title="Gestão de Eventos"
-          icon={Ticket}
-          action={
-            <Button variant="primary" size="sm" iconLeft={<Plus className="w-4 h-4" />} onClick={openNewModal}>
-              Novo Evento
-            </Button>
-          }
-        />
-
-        {/* Stats */}
         <StatGrid cols={4}>
-          <StatCard title="Eventos exibidos" value={filteredEvents.length} icon={Ticket} color="info" delay={0} />
-          <StatCard title="Arrecadação" value={fmt(globalStats.raised)} icon={DollarSign} color="success" delay={0.05} />
-          <StatCard title="Meta consolidada" value={fmt(globalStats.goal)} icon={Target} color="default" delay={0.1} />
-          <StatCard title="Saldo líquido" value={fmt(globalStats.net)} icon={TrendingUp} color={globalStats.net >= 0 ? 'success' : 'danger'} delay={0.15} />
+          <StatCard title="Próximos eventos" value={counts.upcoming} icon={CalendarDays} color="info" description={`${counts.done} realizados`} />
+          <StatCard title="Inscritos nos próximos" value={registered} icon={Users} color="success" />
+          <StatCard title="Arrecadado" value={money(raised)} icon={Wallet} color="purple" description="Dos eventos exibidos" />
+          <StatCard title="Meta de arrecadação" value={money(goal)} icon={Target} color="warning" description={goal ? `${percent(raised, goal) ?? 0}% alcançado` : 'Eventos com taxa'} />
         </StatGrid>
 
-        {/* Filters */}
-        <ContentCard padding="md">
-          <FilterLine>
-            <FilterLineSection>
-              <FilterLineSearch
-                value={eventSearch}
-                onChange={setEventSearch}
-                placeholder="Buscar evento..."
-              />
-            </FilterLineSection>
-            <FilterLineSection>
-              <FilterLineItem>
-                <Select value={eventStatusFilter} onChange={e => setEventStatusFilter(e.target.value)} options={statusFilterOptions} />
-              </FilterLineItem>
-              <FilterLineItem>
-                <Select value={eventSortBy} onChange={e => setEventSortBy(e.target.value)} options={sortOptions} />
-              </FilterLineItem>
-            </FilterLineSection>
-          </FilterLine>
-        </ContentCard>
+        <FilterLine>
+          <FilterLineSection grow>
+            <FilterLineItem grow><FilterLineSearch aria-label="Buscar evento" value={search} onChange={setSearch} placeholder="Nome ou local…" /></FilterLineItem>
+            <FilterLineItem><FilterLineSegmented value={phase} onChange={value => setPhase(String(value))}
+              options={[{ value: 'upcoming', label: `Próximos (${counts.upcoming})` }, { value: 'done', label: `Realizados (${counts.done})` }, { value: 'cancelled', label: `Cancelados (${counts.cancelled})` }, { value: 'all', label: 'Todos' }]} /></FilterLineItem>
+            <FilterLineItem><Select aria-label="Tipo de evento" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'Todos os tipos' }, { value: 'interno', label: 'Internos' }, { value: 'externo', label: 'Externos' }]} /></FilterLineItem>
+          </FilterLineSection>
+          <FilterLineSection align="right">
+            <span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'evento' : 'eventos'}</span>
+            {hasFilter && <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setKind('all'); setPhase('upcoming'); }}>Limpar filtros</Button>}
+          </FilterLineSection>
+        </FilterLine>
 
-        {/* Event cards */}
-        {filteredEvents.length === 0 ? (
-          <EmptyState
-            icon={Ticket}
-            title="Nenhum evento encontrado"
-            description="Crie um novo evento ou ajuste os filtros."
-            action={<Button variant="primary" size="sm" iconLeft={<Plus className="w-4 h-4" />} onClick={openNewModal}>Novo Evento</Button>}
-          />
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredEvents.map(event => {
-              const stats = getEventStats(event);
-              return (
-                <ContentCard key={event.id} padding="none" className="overflow-hidden border-l-4 border-l-amber-500">
-                  <div className="p-6 space-y-5">
-                    {/* Card header */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-                          <Ticket className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="text-base font-black text-zinc-900 leading-tight">{event.name}</h3>
-                          <p className="text-[10px] text-zinc-400 font-black uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(event.date).toLocaleDateString('pt-BR')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="xs" onClick={() => handleEditEvent(event)}>
-                          <Edit3 className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="xs" onClick={() => setDeleteConfirmId(event.id)}>
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Metrics grid */}
-                    <div className="grid grid-cols-4 gap-2 py-3 border-y border-zinc-100">
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-1">Gasto Real</p>
-                        <p className="text-xs font-black text-red-500">{fmt(event.costValue)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-1">Meta Bruta</p>
-                        <p className="text-xs font-black text-blue-600">{fmt(event.goalValue)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-1">Ingressos</p>
-                        <p className="text-xs font-black text-zinc-700">{stats.ticketsSold} / {stats.totalTickets || '∞'}</p>
-                        {stats.ticketsRemaining !== null && (
-                          <p className="text-[9px] font-black text-amber-600">Restantes: {stats.ticketsRemaining}</p>
-                        )}
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest mb-1">Margem</p>
-                        <p className={`text-xs font-black ${stats.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{fmt(stats.netProfit)}</p>
-                      </div>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest">
-                        <span className="text-zinc-400">Arrecadado vs Meta</span>
-                        <span className="text-amber-600">{fmt(stats.raised)} ({stats.progress.toFixed(1)}%)</span>
-                      </div>
-                      <div className="h-2.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-700 rounded-full ${stats.progress >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                          style={{ width: `${Math.min(stats.progress, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Footer status */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${event.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-300'}`} />
-                        <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">
-                          {event.isActive ? 'Evento Ativo' : 'Finalizado'}
-                        </span>
-                      </div>
-                      <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">
-                        Dash: {event.showOnDashboard ? 'Sim' : 'Não'}
-                      </span>
-                    </div>
+        {filtered.length === 0
+          ? <ContentCard><EmptyState icon={CalendarDays} title="Nenhum evento encontrado" description={hasFilter ? 'Ajuste a busca ou os filtros.' : 'Cadastre o primeiro evento.'} action={!hasFilter && staff ? <Button size="sm" onClick={() => navigate(`${EVENTS_BASE}/novo`)}>Novo evento</Button> : undefined} /></ContentCard>
+          : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map(({ event, status }) => {
+            const stats = event.stats;
+            const fee = event.hasFee !== false && Number(event.ticketValue) > 0;
+            const people = stats?.registered || 0;
+            const peopleGoal = event.participantsGoal || event.capacity || null;
+            const peoplePct = percent(people, peopleGoal);
+            const raisedPct = percent(stats?.raised || 0, event.goalValue);
+            const open = () => navigate(eventPath(event, events));
+            return <ContentCard key={event.id} padding="none" className={`group flex h-full flex-col overflow-hidden transition-all hover:border-blue-200 ${status.phase === 'cancelado' ? 'opacity-75' : ''}`}>
+              {event.imageUrl && <button type="button" onClick={open} aria-label={`Abrir ${event.name}`} className="block h-28 w-full overflow-hidden bg-slate-100 focus-visible:outline-blue-500"><img src={photoSrc(event.imageUrl)} alt="" className="h-full w-full object-cover" /></button>}
+              <div className="flex flex-1 flex-col gap-3 p-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge size="sm" color={event.kind === 'externo' ? 'purple' : 'info'}>{event.kind === 'externo' ? 'Externo' : 'Interno'}</Badge>
+                  {event.bridalMeetingId && <Badge size="sm" color="danger" icon={<Heart size={10} />}>Encontro de Noivos</Badge>}
+                  <Badge size="sm" color={fee ? 'warning' : 'success'}>{fee ? `Taxa ${money(Number(event.ticketValue))}` : 'Sem taxa'}</Badge>
+                  <span className="ml-auto"><Badge size="sm" dot color={status.phase === 'cancelado' ? 'danger' : status.phase === 'realizado' || status.phase === 'encerrado' ? 'default' : status.phase === 'hoje' ? 'success' : 'info'}>{status.label}</Badge></span>
+                </div>
+                <button type="button" className="text-left focus-visible:outline-blue-500" onClick={open}>
+                  <h3 className="text-sm font-semibold leading-tight text-slate-900 break-words transition-colors group-hover:text-blue-600">{event.name}</h3>
+                  <ul className="mt-2 space-y-1 text-xs text-slate-500">
+                    <li className="flex items-center gap-1.5"><CalendarDays size={12} className="shrink-0 text-slate-400" />{dateLabel(event.date)}{event.endDate && event.endDate !== event.date ? ` a ${dateLabel(event.endDate)}` : ''}</li>
+                    {(event.startTime || event.endTime) && <li className="flex items-center gap-1.5"><Clock size={12} className="shrink-0 text-slate-400" />{[event.startTime, event.endTime].filter(Boolean).join(' às ')}</li>}
+                    {event.location && <li className="flex items-center gap-1.5 break-words"><MapPin size={12} className="shrink-0 text-slate-400" />{event.location}</li>}
+                  </ul>
+                </button>
+                <div className="mt-auto space-y-2.5 border-t border-slate-100 pt-3">
+                  <div>
+                    <div className="mb-1 flex justify-between text-[11px] text-slate-500"><span>Inscritos</span><span className="tabular-nums">{people}{peopleGoal ? ` / ${peopleGoal}` : ''}</span></div>
+                    <Bar value={peoplePct} label="Inscritos" tone="bg-emerald-500" />
                   </div>
-
-                  {/* CTA */}
-                  <div className="px-6 pb-5">
-                    <Button variant="success" size="sm" fullWidth iconLeft={<ShoppingCart className="w-4 h-4" />}
-                      onClick={() => handleOpenSaleModal(event)}>
-                      Registrar Venda
-                    </Button>
-                  </div>
-                </ContentCard>
-              );
-            })}
-          </div>
-        )}
-
+                  {fee && <div>
+                    <div className="mb-1 flex justify-between text-[11px] text-slate-500"><span>Arrecadado</span><span className="tabular-nums">{money(stats?.raised || 0)}{Number(event.goalValue) > 0 ? ` / ${money(Number(event.goalValue))}` : ''}</span></div>
+                    <Bar value={raisedPct} label="Arrecadação" />
+                  </div>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
+                <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={open}>Abrir evento</Button>
+                {canSellTickets(event) && status.canRegister && <Button variant="outline" size="xs" iconLeft={<ShoppingCart size={12} />} onClick={() => setSaleEvent(event)}>Registrar venda</Button>}
+                {staff && !status.locked && <IconButton variant="ghost" size="xs" aria-label={`Editar ${event.name}`} className="h-8 w-8" onClick={() => navigate(`${eventPath(event, events)}/editar`)}><Pencil size={14} /></IconButton>}
+              </div>
+            </ContentCard>;
+          })}</div>}
       </div>
 
-      {/* ── Modal Venda ──────────────────────────────────────────────────────── */}
-      <Modal
-        isOpen={showSaleModal && !!selectedEventForSale}
-        onClose={() => { setShowSaleModal(false); setSelectedEventForSale(null); }}
-        title={<span>Registrar Venda <span className="text-zinc-400 font-normal text-sm">— {selectedEventForSale?.name}</span></span>}
-        size="lg"
-        footer={
-          <ModalFooter>
-            <Button variant="ghost" size="sm" onClick={() => { setShowSaleModal(false); setSelectedEventForSale(null); }}>Cancelar</Button>
-            <Button variant="success" size="sm" iconLeft={<ShoppingCart className="w-4 h-4" />} onClick={handleCreateSale}>Salvar Venda</Button>
-          </ModalFooter>
-        }
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select
-            label="Equipe"
-            value={saleForm.teamId}
-            onChange={e => {
-              const teamId = e.target.value;
-              const firstMember = members.find(m => m.teamId === teamId);
-              setSaleForm(prev => ({ ...prev, teamId, memberId: firstMember?.id || '' }));
-            }}
-            options={[{ value: '', label: 'Selecione' }, ...teams.map(t => ({ value: t.id, label: t.name }))]}
-          />
-          <Select
-            label="Vendedor"
-            value={saleForm.memberId}
-            onChange={e => setSaleForm(prev => ({ ...prev, memberId: e.target.value }))}
-            options={[{ value: '', label: 'Selecione' }, ...teamMembersForSale.map(m => ({ value: m.id, label: m.name }))]}
-          />
-          <Input
-            label="Quantidade"
-            type="number"
-            min={1}
-            value={String(saleForm.quantity)}
-            onChange={e => setSaleForm(prev => ({ ...prev, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
-          />
-          <Input
-            label="Valor unitário (R$)"
-            type="number"
-            min={0}
-            step="0.01"
-            value={String(saleForm.amount)}
-            onChange={e => setSaleForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-          />
-          <Input
-            label="Comprador"
-            placeholder="Nome do comprador"
-            value={saleForm.buyerName}
-            onChange={e => setSaleForm(prev => ({ ...prev, buyerName: e.target.value }))}
-          />
-          <Input
-            label="Data"
-            type="date"
-            value={saleForm.date}
-            onChange={e => setSaleForm(prev => ({ ...prev, date: e.target.value }))}
-          />
-          <Select
-            label="Status da venda"
-            value={saleForm.status}
-            onChange={e => setSaleForm(prev => ({ ...prev, status: e.target.value as 'Pago' | 'Pendente' }))}
-            options={[{ value: 'Pago', label: 'Pago' }, { value: 'Pendente', label: 'Pendente' }]}
-          />
-          <div className="md:col-span-2 p-4 bg-amber-50 border border-amber-100 rounded-xl">
-            <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Total da operação</p>
-            <p className="text-2xl font-black text-amber-700 mt-1">{fmt(saleForm.quantity * saleForm.amount)}</p>
-          </div>
-        </div>
-      </Modal>
-
-      {/* ── Modal Evento ─────────────────────────────────────────────────────── */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditingEventId(null); }}
-        title={editingEventId ? 'Editar Evento' : 'Novo Evento'}
-        size="2xl"
-        footer={
-          <ModalFooter>
-            <Button variant="ghost" size="sm" onClick={() => { setShowModal(false); setEditingEventId(null); }}>Cancelar</Button>
-            <Button variant="primary" size="sm" onClick={handleSave} disabled={!formData.name || formData.goalValue <= 0}>
-              {editingEventId ? 'Salvar' : 'Criar Evento'}
-            </Button>
-          </ModalFooter>
-        }
-      >
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 border-b border-zinc-100 overflow-x-auto">
-          {MODAL_TABS.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-widest whitespace-nowrap border-b-2 transition-all ${
-                activeTab === tab.id
-                  ? 'border-amber-500 text-amber-600'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab: Dados básicos */}
-        {activeTab === 'basic' && (
-          <div className="space-y-5">
-            {/* Summary strip */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-blue-500">Receita potencial</p>
-                <p className="text-sm font-black text-blue-700 mt-1">{fmt(potentialRevenue)}</p>
-              </div>
-              <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-red-500">Gastos atuais</p>
-                <p className="text-sm font-black text-red-600 mt-1">{fmt(totalExpenses)}</p>
-              </div>
-              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Meta</p>
-                <p className="text-sm font-black text-emerald-700 mt-1">{fmt(Number(formData.goalValue || 0))}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <Input
-                  label="Nome do Evento *"
-                  placeholder="Ex: Galinhada Beneficente 2024"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <Input
-                label="Data do Evento *"
-                type="date"
-                value={formData.date}
-                onChange={e => setFormData({ ...formData, date: e.target.value })}
-              />
-              <Input
-                label="Local do Evento"
-                placeholder="Ex: Salão Paroquial"
-                iconLeft={<MapPin className="w-4 h-4" />}
-                value={formData.location}
-                onChange={e => setFormData({ ...formData, location: e.target.value })}
-              />
-              <div className="md:col-span-2">
-                <Input
-                  label="Responsável"
-                  placeholder="Nome do coordenador"
-                  iconLeft={<User className="w-4 h-4" />}
-                  value={formData.responsible}
-                  onChange={e => setFormData({ ...formData, responsible: e.target.value })}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block mb-1">Descrição</label>
-                <textarea
-                  placeholder="Descreva o evento, objetivo e programação..."
-                  className="ds-input w-full resize-none"
-                  rows={3}
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div className="md:col-span-2 flex items-center justify-between p-4 bg-amber-50 border border-amber-100 rounded-xl">
-                <div>
-                  <p className="text-xs font-black text-amber-700 uppercase tracking-widest">Exibir no Dashboard</p>
-                  <p className="text-[10px] text-amber-600 font-medium mt-0.5">Visível na página inicial</p>
-                </div>
-                <Switch
-                  checked={formData.showOnDashboard}
-                  onCheckedChange={v => setFormData({ ...formData, showOnDashboard: v })}
-                />
-              </div>
-            </div>
-
-            <Divider />
-            <p className="text-xs font-black text-zinc-700 uppercase tracking-widest">Ingressos</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Quantidade"
-                type="number"
-                placeholder="0"
-                value={String(formData.ticketQuantity)}
-                onChange={e => setFormData({ ...formData, ticketQuantity: parseInt(e.target.value) || 0 })}
-              />
-              <Input
-                label="Valor Unitário (R$)"
-                type="number"
-                placeholder="0.00"
-                value={String(formData.ticketValue)}
-                onChange={e => setFormData({ ...formData, ticketValue: parseFloat(e.target.value) || 0 })}
-              />
-              <div className="p-4 bg-amber-500 rounded-xl flex flex-col justify-center">
-                <p className="text-[9px] font-black text-amber-100 uppercase tracking-widest mb-1">Receita Potencial</p>
-                <p className="text-xl font-black text-white">{fmt(potentialRevenue)}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab: Gastos */}
-        {activeTab === 'expenses' && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-black text-zinc-800">Detalhamento de custos</p>
-              <span className="px-3 py-1 bg-red-50 border border-red-100 rounded-lg text-[10px] font-black text-red-600 uppercase">
-                Total: {fmt(totalExpenses)}
-              </span>
-            </div>
-            <div className="bg-zinc-50 rounded-xl p-4 space-y-3">
-              <div className="grid grid-cols-12 gap-2">
-                <div className="col-span-6">
-                  <Input
-                    placeholder="Descrição do gasto..."
-                    value={newExpense.description}
-                    onChange={e => setNewExpense({ ...newExpense, description: e.target.value })}
-                  />
-                </div>
-                <div className="col-span-3">
-                  <Input
-                    type="number"
-                    placeholder="Valor R$"
-                    value={String(newExpense.amount)}
-                    onChange={e => setNewExpense({ ...newExpense, amount: parseFloat(e.target.value) || 0 })}
-                  />
-                </div>
-                <div className="col-span-3 flex items-end">
-                  <Button variant="primary" size="md" fullWidth iconLeft={<Plus className="w-4 h-4" />} onClick={handleAddExpense}>
-                    Adicionar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {formData.expenses.map(exp => (
-                  <div key={exp.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-zinc-100">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 flex items-center justify-center shrink-0">
-                        <Receipt className="w-4 h-4" />
-                      </div>
-                      <span className="text-sm font-medium text-zinc-700 truncate">{exp.description}</span>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-sm font-black text-red-500">{fmt(exp.amount)}</span>
-                      <Button variant="ghost" size="xs" onClick={() => setFormData({ ...formData, expenses: formData.expenses.filter(e => e.id !== exp.id) })}>
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {formData.expenses.length === 0 && (
-                  <div className="py-8 text-center border-2 border-dashed border-zinc-200 rounded-xl">
-                    <Receipt className="w-8 h-8 text-zinc-200 mx-auto mb-2" />
-                    <p className="text-xs text-zinc-400 font-bold">Nenhum gasto cadastrado</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab: Metas */}
-        {activeTab === 'goals' && (
-          <div className="space-y-5">
-            <div className="p-6 bg-gradient-to-br from-emerald-50 to-blue-50 rounded-2xl border border-emerald-100">
-              <p className="text-xs font-black text-emerald-700 uppercase tracking-widest mb-3 flex items-center gap-2">
-                <Target className="w-4 h-4" /> Meta Total de Arrecadação (Bruto)
-              </p>
-              <Input
-                type="number"
-                placeholder="0.00"
-                addonLeft="R$"
-                value={String(formData.goalValue)}
-                onChange={e => setFormData({ ...formData, goalValue: parseFloat(e.target.value) || 0 })}
-              />
-              <p className="text-[10px] text-emerald-600 font-medium mt-2">
-                Sua meta deve cobrir os gastos ({fmt(totalExpenses)}) e gerar lucro!
-              </p>
-            </div>
-
-            <div>
-              <p className="text-sm font-black text-zinc-800 mb-3">Distribuição por Equipe Base</p>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {formData.teamQuotas.map((quota, idx) => {
-                  const team = teams.find(t => t.id === quota.teamId);
-                  return (
-                    <div key={quota.teamId} className="flex items-center justify-between p-3 bg-zinc-50 rounded-xl border border-zinc-100">
-                      <span className="text-sm font-bold text-zinc-700 flex-1">{team?.name}</span>
-                      <div className="w-32">
-                        <Input
-                          type="number"
-                          placeholder="0.00"
-                          addonLeft="R$"
-                          value={String(quota.quotaValue)}
-                          onChange={e => {
-                            const newQuotas = [...formData.teamQuotas];
-                            newQuotas[idx].quotaValue = parseFloat(e.target.value) || 0;
-                            setFormData({ ...formData, teamQuotas: newQuotas });
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* ── Confirm Delete ────────────────────────────────────────────────────── */}
-      <ConfirmModal
-        isOpen={!!deleteConfirmId}
-        onClose={() => setDeleteConfirmId(null)}
-        onConfirm={handleDeleteConfirm}
-        title="Inativar evento"
-        message="Deseja realmente inativar este evento? Ele não será exibido na listagem ativa."
-        confirmLabel="Inativar"
-        variant="danger"
-      />
+      {saleEvent && <EventSaleModal isOpen event={saleEvent} teams={teams} members={members} scopeTeamId={scope} onClose={() => setSaleEvent(null)}
+        onSaved={(sales: EventSale[]) => { void sales; setRetry(value => value + 1); }} />}
     </PageWrapper>
   );
 };

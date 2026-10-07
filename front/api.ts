@@ -71,8 +71,29 @@ export const api = {
   getEvents: () => request('/events'),
   createEvent: (data: any) => request('/events', { method: 'POST', body: JSON.stringify(data) }),
   updateEvent: (id: string, data: any) => request(`/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getEvent: (id: string) => request(`/events/${id}`),
+  getEventByMeeting: (meetingId: string) => request(`/events/by-meeting/${meetingId}`),
+  createEventExpense: (eventId: string, data: any) => request(`/events/${eventId}/expenses`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteEventExpense: (id: string) => request(`/events/expenses/${id}`, { method: 'DELETE' }),
+  createEventIncome: (eventId: string, data: any) => request(`/events/${eventId}/incomes`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteEventIncome: (id: string) => request(`/events/incomes/${id}`, { method: 'DELETE' }),
+  deleteEvent: (id: string) => request(`/events/${id}`, { method: 'DELETE' }),
+  uploadEventImage: (file: File): Promise<{ imageUrl: string }> => {
+    const body = new FormData();
+    body.append('image', file);
+    return request('/events/image', { method: 'POST', body });
+  },
+  createEventItems: (eventId: string, items: any[]) => request(`/events/${eventId}/items`, { method: 'POST', body: JSON.stringify({ items }) }),
+  updateEventItem: (itemId: string, data: any) => request(`/events/items/${itemId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEventItem: (itemId: string) => request(`/events/items/${itemId}`, { method: 'DELETE' }),
+  createEventRegistrations: (eventId: string, registrations: any[]) => request(`/events/${eventId}/registrations`, { method: 'POST', body: JSON.stringify({ registrations }) }),
+  updateEventRegistration: (id: string, data: any) => request(`/events/registrations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEventRegistration: (id: string) => request(`/events/registrations/${id}`, { method: 'DELETE' }),
+  getPublicEvent: (token: string) => request(`/events/public/${token}`),
+  registerPublicEvent: (token: string, data: any) => request(`/events/public/${token}/register`, { method: 'POST', body: JSON.stringify(data) }),
 
   getEventSales: () => request('/event-sales'),
+  deleteEventSale: (id: string) => request(`/event-sales/${id}`, { method: 'DELETE' }),
   createEventSale: (data: any) => request('/event-sales', { method: 'POST', body: JSON.stringify(data) }),
 
   getPayments: () => request('/payments'),

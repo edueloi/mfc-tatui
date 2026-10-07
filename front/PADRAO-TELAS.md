@@ -15,6 +15,7 @@ Referência extraída das telas já ajustadas:
 | Ajustes | `views/Settings.tsx` | tela com **abas na rota** (`/configuracoes/:aba`) e seções independentes |
 | Usuários | `views/UserManagement.tsx` + `components/UserFormModal.tsx` | cadastro com modal (vincular MFCista ou cadastro direto), ativar/inativar acesso |
 | Livro Caixa (livros → lançamentos) | `views/GeneralLedger.tsx` + `components/LedgerBookModal.tsx` + `components/LedgerEntryModal.tsx` + `utils/ledger.ts` | lista de livros → livro com abas Lançamentos / Balancete / Gráfico |
+| Eventos (lista, evento, formulário, inscrição pública) | `views/Events.tsx` + `views/EventDetail.tsx` + `views/EventFormPage.tsx` + `views/EventPublicForm.tsx` + `components/Event*.tsx` + `utils/events.ts` | módulo completo: taxa ou não, metas, inscrições, itens, vendas, financeiro, gráficos |
 | Relatórios | `views/Reports.tsx` | **painel de indicadores** (filtros de período, KPIs, abas Visão geral/Tabela) |
 | Criar/Editar MFCista | `views/MemberFormPage.tsx` + `components/MemberForm.tsx` | **formulários** de cadastro (mesma tela cria e edita) |
 
@@ -260,6 +261,17 @@ A Tesouraria usa o mesmo slug em `/financeiro/:teamSlug` (`teamPath(team, teams,
 - Quando algo "acontece e acaba" (encontro, campanha), mostre **Em andamento / Encerrado** e deixe fechar de duas formas: **manual** (botão Encerrar/Reabrir com confirmação) e **automática** por prazo (`utils/meetingStatus.ts`, `CLOSE_AFTER_DAYS = 7` depois da data). O estado derivado fica no front; o manual é o campo `isActive`.
 - Listas mostram só o que está em andamento por padrão, com filtro **Encerrados** e **Todos**. Encerrado não aceita novos vínculos (botão "Novo casal" desabilitado e fora das opções do formulário), mas continua consultável.
 - **Cuidado ao editar**: o `PUT` do backend deve manter o `isActive` quando o campo não vem (antes ele reabria o encontro a cada edição).
+
+## 8.2.7 Eventos (como o módulo funciona)
+
+- **Com taxa ou sem taxa.** `hasFee` + `ticketValue`. Sem taxa não há cobrança, venda de ingresso nem meta em R$ (o backend recusa `POST /event-sales` com 422). Meta de participantes e vagas valem para os dois.
+- **Interno ou externo.** Interno: só membros, as equipes inscrevem. Externo: gera link público `/eventos/inscricao/:token` (sem login), com prazo, vagas e telefone único por evento.
+- **Fases** (`eventStatus`): em breve → acontecendo → realizado (7 dias para acertar contas) → **encerrado** (sozinho 7 dias depois do fim, ou à mão). Encerrado só consulta: o backend recusa inscrição, pagamento, entrada, gasto e venda (422). Cancelado é outra coisa e mantém os dados.
+- **Escopo por equipe** (`scopedTeamId`): coordenação geral vê e inscreve tudo; coordenador de equipe, vice, tesoureiro e usuário só mexem na própria equipe.
+- **Dinheiro:** entradas = inscrições pagas + vendas + casais do Encontro de Noivos + entradas avulsas; gastos = previstos (cadastrados no formulário) + "a mais" (lançados depois). Resultado = entradas − gastos.
+- **Encontro de Noivos ligado:** todo encontro cria um evento (`bridal_meeting_id`), que acompanha nome/data/local do encontro; casais contam como 2 pessoas e o pagamento deles entra nas entradas. O evento ligado não pode ser excluído por fora do encontro.
+- Itens para levar têm listas prontas (café, almoço, lanche, material) e o botão "Eu levo".
+- Telas novas **precisam do backend atualizado**. A tela detecta o servidor antigo (eventos sem `stats`) e avisa para reiniciar, em vez de mostrar "erro de conexão".
 
 ## 8.3 Conferir o formato da API antes de montar gráficos
 

@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, Layers, BarChart3, TrendingUp, Cake, Heart, Wallet, ArrowUpRight, ArrowDownRight, Home, MessageCircle, Loader2, PartyPopper, LayoutDashboard, CircleDollarSign, History,
+  Users, Layers, BarChart3, CalendarDays, TrendingUp, Cake, Heart, Wallet, ArrowUpRight, ArrowDownRight, Home, MessageCircle, Loader2, PartyPopper, LayoutDashboard, CircleDollarSign, History,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { api } from '../api';
-import { BaseTeam, Member } from '../types';
+import { BaseTeam, Event, Member } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, PanelCard, Tabs, Button, Badge, Select, Combobox, EmptyState,
   FilterLine, FilterLineSection, FilterLineItem, FilterLineSegmented,
@@ -15,6 +15,7 @@ import { dateLabel } from '../utils/dates';
 import { whatsappUrl } from '../utils/whatsapp';
 import { ageDistribution } from '../utils/ageRanges';
 import { useUrlTab } from '../src/hooks/useUrlTab';
+import { EVENTS_BASE, eventPath, eventStatus, money as eventMoney, percent as eventPercent } from '../utils/events';
 import { BIRTHDAY_GROUP_LABEL, BirthdayGroup, birthdayGroup, birthdayMessage, weddingMessage } from '../utils/birthdayMessages';
 
 interface Summary {
@@ -52,6 +53,7 @@ const Dashboard: React.FC = () => {
   const [teams, setTeams] = useState<BaseTeam[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [summary, setSummary] = useState<Summary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -59,10 +61,10 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const load = () => Promise.all([api.getTeams(), api.getMembers(), api.getLedger().catch(() => []), api.getDashboardSummary(month, year)])
-      .then(([teamItems, memberItems, ledgerItems, summaryData]) => {
+    const load = () => Promise.all([api.getTeams(), api.getMembers(), api.getLedger().catch(() => []), api.getDashboardSummary(month, year), api.getEvents().catch(() => [])])
+      .then(([teamItems, memberItems, ledgerItems, summaryData, eventItems]) => {
         if (cancelled) return;
-        setTeams(teamItems); setMembers(memberItems); setLedger(ledgerItems); setSummary({ ...emptySummary, ...summaryData }); setError(false);
+        setTeams(teamItems); setMembers(memberItems); setLedger(ledgerItems); setEvents(eventItems); setSummary({ ...emptySummary, ...summaryData }); setError(false);
       })
       .catch(() => { if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -116,6 +118,12 @@ const Dashboard: React.FC = () => {
 
   const visibleCelebrations = celebrations.filter(item => when === 'today' ? item.isToday : when === 'week' ? item.inNextDays : true);
   const todayCount = celebrations.filter(item => item.isToday).length;
+  const dashboardEvents = useMemo(() => events
+    .filter(event => event.showOnDashboard !== false)
+    .map(event => ({ event, status: eventStatus(event) }))
+    .filter(({ status }) => status.phase === 'em-breve' || status.phase === 'hoje')
+    .sort((a, b) => a.event.date.localeCompare(b.event.date))
+    .slice(0, 3), [events]);
 
   const teamResults = useMemo(() => summary.barData
     .filter(team => team.total > 0 && (teamIds.length === 0 || teamIds.includes(team.id)))
@@ -187,6 +195,33 @@ const Dashboard: React.FC = () => {
               <StatCard title="Famílias" value={families} icon={Home} color="success" description="Núcleos familiares" />
               <StatCard title="Adimplência" value={`${averagePercent}%`} icon={TrendingUp} color={averagePercent >= GOAL ? 'success' : 'danger'} description={`${totalPaid} de ${totalCharged} pagaram`} />
             </StatGrid>
+            {dashboardEvents.length > 0 && <PanelCard title="Próximos eventos" description="Inscritos e metas dos eventos que vêm aí." icon={CalendarDays}
+              action={<Button variant="ghost" size="xs" onClick={() => navigate(EVENTS_BASE)}>Ver todos</Button>}>
+              <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                {dashboardEvents.map(({ event, status }) => {
+                  const fee = event.hasFee !== false && Number(event.ticketValue) > 0;
+                  const registered = event.stats?.registered || 0;
+                  const peopleGoal = event.participantsGoal || event.capacity || null;
+                  const peoplePct = eventPercent(registered, peopleGoal);
+                  const raisedPct = eventPercent(event.stats?.raised || 0, event.goalValue);
+                  return <li key={event.id} className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <button type="button" onClick={() => navigate(eventPath(event, events))} className="min-w-0 text-left text-[13px] font-medium text-slate-900 break-words hover:text-blue-600 focus-visible:outline-blue-500">{event.name}</button>
+                      <Badge size="sm" color={status.phase === 'hoje' ? 'success' : 'info'}>{status.label}</Badge>
+                    </div>
+                    <p className="text-xs text-slate-500">{dateLabel(event.date)}{event.location ? ` · ${event.location}` : ''}</p>
+                    <div>
+                      <div className="mb-1 flex justify-between text-[11px] text-slate-500"><span>Inscritos</span><span className="tabular-nums">{registered}{peopleGoal ? ` / ${peopleGoal}` : ''}</span></div>
+                      <div role="progressbar" aria-label={`Inscritos em ${event.name}`} aria-valuenow={peoplePct ?? 0} aria-valuemin={0} aria-valuemax={100} className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${peoplePct ?? 0}%` }} /></div>
+                    </div>
+                    {fee && <div>
+                      <div className="mb-1 flex justify-between text-[11px] text-slate-500"><span>Arrecadado</span><span className="tabular-nums">{eventMoney(event.stats?.raised || 0)}{Number(event.goalValue) > 0 ? ` / ${eventMoney(Number(event.goalValue))}` : ''}</span></div>
+                      <div role="progressbar" aria-label={`Arrecadação de ${event.name}`} aria-valuenow={raisedPct ?? 0} aria-valuemin={0} aria-valuemax={100} className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${raisedPct ?? 0}%` }} /></div>
+                    </div>}
+                  </li>;
+                })}
+              </ul>
+            </PanelCard>}
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               <PanelCard title="Adimplência por equipe" description={`Quem pagou a mensalidade de ${periodLabel}.`}>
                 {teamResults.length ? <div className="h-64 min-w-0">

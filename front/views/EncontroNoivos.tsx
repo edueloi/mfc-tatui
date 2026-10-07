@@ -16,6 +16,7 @@ import { dateLabel } from '../utils/dates';
 import { meetingStatus, CLOSE_AFTER_DAYS } from '../utils/meetingStatus';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
 import { BRIDAL_BASE, SEM_ENCONTRO, couplePath, findMeeting, meetingPath } from '../utils/bridalPaths';
+import { eventPath } from '../utils/events';
 
 const tabs = [
   { id: 'encontros', label: 'Encontros', icon: Calendar },
@@ -52,6 +53,7 @@ const EncontroNoivos: React.FC = () => {
   const [meetingFilter, setMeetingFilter] = useState('open');
   const [closeTarget, setCloseTarget] = useState<BridalMeeting | null>(null);
   const [closing, setClosing] = useState(false);
+  const [openingEvent, setOpeningEvent] = useState<string | null>(null);
 
   const viewMode: 'encontros' | 'todos' = pathname.replace(/\/+$/, '') === `${BRIDAL_BASE}/casais` ? 'todos' : 'encontros';
   const orphanView = meetingSlug === SEM_ENCONTRO;
@@ -177,6 +179,18 @@ const EncontroNoivos: React.FC = () => {
     } finally { setClosing(false); }
   };
 
+  /** Abre o evento ligado ao encontro (é criado na hora se ainda não existir) direto na aba Financeiro. */
+  const openMeetingEvent = async (meeting: BridalMeeting, tab = 'financeiro') => {
+    if (openingEvent) return;
+    setOpeningEvent(meeting.id);
+    try {
+      const [event, all] = await Promise.all([api.getEventByMeeting(meeting.id), api.getEvents()]);
+      navigate(`${eventPath(event, all)}?aba=${tab}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível abrir o evento do encontro.');
+    } finally { setOpeningEvent(null); }
+  };
+
   const openMeetingForm = (meeting: BridalMeeting | null) => { setEditingMeeting(meeting); setShowMeetingModal(true); };
   const handleMeetingSaved = (saved: BridalMeeting, mode: 'created' | 'updated') =>
     setMeetings(prev => mode === 'created' ? [saved, ...prev] : prev.map(meeting => meeting.id === saved.id ? { ...saved, couplesCount: meeting.couplesCount } : meeting));
@@ -237,6 +251,7 @@ const EncontroNoivos: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
               <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={() => navigate(meetingPath(meeting, meetings))}>Abrir encontro</Button>
+              <IconButton variant="ghost" size="xs" aria-label={`Evento e finanças de ${meeting.name}`} title="Evento, gastos e entradas" className="h-8 w-8" disabled={!!openingEvent} onClick={() => openMeetingEvent(meeting)}><Wallet size={14} /></IconButton>
               {canCreate && (status.closed
                 ? status.reason === 'manual' && <IconButton variant="ghost" size="xs" aria-label={`Reabrir ${meeting.name}`} title="Reabrir encontro" className="h-8 w-8" onClick={() => setMeetingActive(meeting, true)}><LockOpen size={14} /></IconButton>
                 : <IconButton variant="ghost" size="xs" aria-label={`Encerrar ${meeting.name}`} title="Encerrar encontro" className="h-8 w-8" onClick={() => setCloseTarget(meeting)}><Lock size={14} /></IconButton>)}
@@ -292,6 +307,7 @@ const EncontroNoivos: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate(BRIDAL_BASE)}>Voltar para Encontros</Button>
             {selectedMeeting && canCreate && <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" iconLeft={<Wallet size={14} />} loading={openingEvent === selectedMeeting.id} onClick={() => openMeetingEvent(selectedMeeting)}>Evento e finanças</Button>
               {!meetingStatus(selectedMeeting).closed && <Button variant="outline" size="sm" iconLeft={<Lock size={14} />} onClick={() => setCloseTarget(selectedMeeting)}>Encerrar encontro</Button>}
               {meetingStatus(selectedMeeting).reason === 'manual' && <Button variant="outline" size="sm" iconLeft={<LockOpen size={14} />} loading={closing} onClick={() => setMeetingActive(selectedMeeting, true)}>Reabrir encontro</Button>}
               <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={() => openMeetingForm(selectedMeeting)}>Editar encontro</Button>

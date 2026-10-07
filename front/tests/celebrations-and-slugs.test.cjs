@@ -99,3 +99,46 @@ test('livro caixa: saldo, totais por mês e balancete vêm dos lançamentos', ()
   assert.equal(findBook(books, 'livro-caixa-2025').id, 'a');
   assert.equal(findBook(books, 'b').id, 'b');
 });
+
+test('eventos: fases, encerramento em 7 dias, venda só com taxa e escopo por equipe', () => {
+  const { eventStatus, canSellTickets, scopedTeamId, eventSlug, findEvent, ITEM_TEMPLATES, inviteMessage } = loadSource('utils/events.ts');
+  const day = (y, m, d) => new Date(y, m - 1, d, 9);
+  const base = { isActive: true, registrationOpen: true, closed: false, stats: { registered: 0 }, capacity: null, registrationDeadline: '' };
+  const event = { ...base, date: '2026-10-10', endDate: '' };
+  assert.equal(eventStatus(event, day(2026, 10, 1)).phase, 'em-breve');
+  assert.equal(eventStatus(event, day(2026, 10, 1)).daysUntil, 9);
+  assert.equal(eventStatus(event, day(2026, 10, 10)).phase, 'hoje');
+  const done = eventStatus(event, day(2026, 10, 12));
+  assert.equal(done.phase, 'realizado'); assert.equal(done.daysToClose, 5); assert.equal(done.locked, false);
+  assert.equal(eventStatus(event, day(2026, 10, 17)).phase, 'realizado');
+  const closed = eventStatus(event, day(2026, 10, 18));
+  assert.equal(closed.phase, 'encerrado'); assert.equal(closed.locked, true); assert.equal(closed.canRegister, false);
+  assert.equal(eventStatus({ ...event, closed: true }, day(2026, 10, 1)).phase, 'encerrado');
+  assert.equal(eventStatus({ ...event, isActive: false }, day(2026, 10, 1)).phase, 'cancelado');
+  assert.equal(eventStatus({ ...event, endDate: '2026-10-12' }, day(2026, 10, 11)).phase, 'hoje');
+  // vagas e prazo
+  assert.equal(eventStatus({ ...event, capacity: 5, stats: { registered: 5 } }, day(2026, 10, 1)).publicOpen, false);
+  assert.equal(eventStatus({ ...event, registrationDeadline: '2026-10-05' }, day(2026, 10, 6)).publicOpen, false);
+  assert.equal(eventStatus({ ...event, registrationOpen: false }, day(2026, 10, 1)).publicOpen, false);
+  // venda de ingresso
+  assert.equal(canSellTickets({ hasFee: true, ticketValue: 50, isActive: true, locked: false }), true);
+  assert.equal(canSellTickets({ hasFee: false, ticketValue: 50, isActive: true, locked: false }), false);
+  assert.equal(canSellTickets({ hasFee: true, ticketValue: 0, isActive: true, locked: false }), false);
+  assert.equal(canSellTickets({ hasFee: true, ticketValue: 50, isActive: true, locked: true }), false);
+  // quem fica limitado à própria equipe
+  assert.equal(scopedTeamId({ role: 'Administrador', teamId: 't1' }), null);
+  assert.equal(scopedTeamId({ role: 'Coordenador Cidade' }), null);
+  assert.equal(scopedTeamId({ role: 'Tesoureiro', teamId: 't1' }), 't1');
+  assert.equal(scopedTeamId({ role: 'Usuário' }), '__sem_equipe__');
+  // slugs e rotas reservadas
+  const events = [{ id: 'a', name: 'Retiro', date: '2026-10-10' }, { id: 'b', name: 'Retiro', date: '2026-11-10' }, { id: 'c', name: 'Novo', date: '2026-12-01' }];
+  assert.equal(eventSlug(events[0], events), 'retiro-2026-10-10');
+  assert.equal(eventSlug(events[2], events), 'novo-evento');
+  assert.equal(findEvent(events, 'retiro-2026-11-10').id, 'b');
+  assert.equal(findEvent(events, 'a').id, 'a');
+  // listas prontas e convite
+  assert.ok(ITEM_TEMPLATES.length >= 4 && ITEM_TEMPLATES.every(template => template.items.length >= 5 && template.items.every(item => item.name && item.quantity > 0)));
+  global.window = { location: { origin: 'https://mfc.test' } };
+  assert.match(inviteMessage({ name: 'Retiro', date: '2026-10-10', startTime: '08:00', location: 'Salão', hasFee: true, ticketValue: 50 }, 'https://mfc.test/eventos/inscricao/x', 'Maria Souza'), /^Olá, Maria! .*"Retiro".*10\/10\/2026 às 08:00.*R\$\s50,00 por pessoa.*https:\/\/mfc\.test/);
+  assert.match(inviteMessage({ name: 'Retiro', date: '2026-10-10', hasFee: false }, 'x'), /Participação sem taxa/);
+});

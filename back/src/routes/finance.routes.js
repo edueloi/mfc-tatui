@@ -7,6 +7,7 @@ const { rowToEventSale, rowToPayment, rowToLedger, rowToLedgerEntity } = require
 const { nowIso, toInt } = require('../utils/helpers');
 const { canBeChargedMonthly } = require('../utils/payment-rules');
 const { validReceiptDate } = require('../utils/payment-accounting');
+const { ensureEventSchema, isEventLocked } = require('../utils/events-schema');
 
 const router = express.Router();
 
@@ -30,6 +31,16 @@ router.get('/event-sales', async (req, res) => {
 
 router.post('/event-sales', async (req, res) => {
   const data = req.body || {};
+  await ensureEventSchema();
+  const event = await db.prepare('SELECT * FROM events WHERE id = ?').get(data.eventId);
+  if (!event) return res.status(404).json({ error: 'Evento não encontrado.' });
+  if (!Number(event.is_active)) return res.status(422).json({ error: 'Este evento foi cancelado.' });
+  if (isEventLocked(event)) return res.status(422).json({ error: 'Este evento já foi encerrado. Reabra o evento para registrar vendas.' });
+  // Sem taxa não há ingresso para vender.
+  if (!Number(event.has_fee) || !(parseFloat(event.ticket_value) > 0)) return res.status(422).json({ error: 'Este evento não tem taxa, então não há venda de ingresso.' });
+  if (!data.teamId || !data.memberId) return res.status(400).json({ error: 'Informe a equipe e o vendedor.' });
+  if (!(parseFloat(data.amount) > 0)) return res.status(400).json({ error: 'Informe um valor maior que zero.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || ''))) return res.status(400).json({ error: 'Informe a data da venda.' });
   const id = uuid();
   await db.prepare(`
     INSERT INTO event_sales (id, event_id, team_id, member_id, buyer_name, amount, status, date)
@@ -41,11 +52,23 @@ router.post('/event-sales', async (req, res) => {
     data.memberId, 
     data.buyerName || '', 
     data.amount || 0, 
-    data.status || 'PAGO', 
+    String(data.status || '').toLowerCase() === 'pendente' ? 'Pendente' : 'Pago', 
     data.date
   );
   const row = await db.prepare('SELECT * FROM event_sales WHERE id = ?').get(id);
   res.status(201).json(rowToEventSale(row));
+});
+
+router.delete('/event-sales/:id', async (req, res) => {
+  try {
+    await ensureEventSchema();
+    const sale = await db.prepare('SELECT * FROM event_sales WHERE id = ?').get(req.params.id);
+    if (!sale) return res.status(204).end();
+    const event = await db.prepare('SELECT * FROM events WHERE id = ?').get(sale.event_id);
+    if (event && isEventLocked(event)) return res.status(422).json({ error: 'Este evento já foi encerrado. Reabra o evento para alterar vendas.' });
+    await db.prepare('DELETE FROM event_sales WHERE id = ?').run(req.params.id);
+    res.status(204).end();
+  } catch (error) { res.status(500).json({ error: 'Erro ao excluir venda: ' + error.message }); }
 });
 
 // Pagamentos de mensalidade

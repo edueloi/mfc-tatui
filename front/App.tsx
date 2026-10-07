@@ -20,6 +20,9 @@ import DailyEntries from './views/DailyEntries';
 import EncontroNoivos from './views/EncontroNoivos';
 import BridalCoupleDetail from './views/BridalCoupleDetail';
 import BridalPublicForm from './views/BridalPublicForm';
+import EventDetail from './views/EventDetail';
+import EventFormPage from './views/EventFormPage';
+import EventPublicForm from './views/EventPublicForm';
 import Nucleacao from './views/Nucleacao';
 import NucleationDetail from './views/NucleationDetail';
 import { User as UserType } from './types';
@@ -72,6 +75,7 @@ const App: React.FC = () => {
         <Routes>
           {/* Rota pública — sem login, sem sidebar */}
           <Route path="/noivos/form/:token" element={<BridalPublicForm />} />
+          <Route path="/eventos/inscricao/:token" element={<EventPublicForm />} />
 
           {!currentUser ? (
             <Route
@@ -97,6 +101,9 @@ const App: React.FC = () => {
               <Route path="equipes/:teamSlug" element={<TeamDetail />} />
               <Route path="minha-equipe" element={<MyTeamView teamId={currentUser.teamId || 't1'} userId={currentUser.id} userRole={currentUser.role} />} />
               <Route path="eventos" element={<EventsView />} />
+              <Route path="eventos/novo" element={<EventFormPage />} />
+              <Route path="eventos/:eventSlug/editar" element={<EventFormPage />} />
+              <Route path="eventos/:eventSlug" element={<EventDetail />} />
               <Route path="financeiro" element={<FinanceView cityId={currentUser.cityId} userId={currentUser.id} />} />
               <Route path="financeiro/:teamSlug" element={<FinanceView cityId={currentUser.cityId} userId={currentUser.id} />} />
               <Route path="livro-caixa" element={<GeneralLedger />} />

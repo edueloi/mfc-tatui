@@ -74,7 +74,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
 // Servir o front buildado (produção / VPS)
 const frontDistPath = path.join(__dirname, '../../front/dist');
 app.use(express.static(frontDistPath));
-app.get(/^(?!\/(auth|cities|teams|roles|members|users|events|dashboard|config|api|daily-entries|bridal-couples|bridal-meetings|nucleation|uploads|health)).*/, (req, res) => {
+// Só é API quando o caminho é exatamente a raiz (ou começa com ela + "/"): antes "/configuracoes" era tratado como "/config" e dava erro ao atualizar a página.
+app.get(/^(?!\/(?:auth|cities|teams|roles|members|member-photos|users|events|dashboard|config|api|daily-entries|bridal-couples|bridal-meetings|nucleation|payments|event-sales|ledger|ledger-entities|uploads|health)(?:[/?]|$)).*/, (req, res) => {
   res.sendFile(path.join(frontDistPath, 'index.html'));
 });
 

@@ -49,6 +49,8 @@ export interface EventTeamQuota {
 }
 
 export interface EventExpense {
+  isExtra?: boolean;
+  date?: string;
   id: string;
   description: string;
   amount: number;
@@ -68,6 +70,91 @@ export interface Event {
   ticketQuantity?: number;
   ticketValue?: number;
   expenses: EventExpense[];
+  location?: string;
+  description?: string;
+  responsible?: string;
+  // Controle completo do evento
+  kind?: 'interno' | 'externo';
+  /** Evento com taxa: cobra `ticketValue` por pessoa. Sem taxa, não há cobrança nem venda. */
+  hasFee?: boolean;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+  imageUrl?: string;
+  notes?: string;
+  registrationOpen?: boolean;
+  registrationDeadline?: string;
+  capacity?: number | null;
+  participantsGoal?: number | null;
+  publicToken?: string;
+  bridalMeetingId?: string | null;
+  /** Encerrado à mão. */
+  closed?: boolean;
+  /** Encerrado (à mão ou 7 dias depois do evento): não aceita inscrição, pagamento, gasto nem entrada. */
+  locked?: boolean;
+  extraExpenses?: EventExpense[];
+  incomes?: EventIncome[];
+  couples?: EventCouple[];
+  stats?: EventStats;
+  teamStats?: { teamId: string; registered: number; raised: number }[];
+  items?: EventItem[];
+  registrations?: EventRegistration[];
+}
+
+export interface EventStats {
+  registered: number;
+  confirmed: number;
+  couples: number;
+  raisedBreakdown: { registrations: number; sales: number; couples: number; incomes: number };
+  expensesPlanned: number;
+  expensesExtra: number;
+  expensesTotal: number;
+  invited: number;
+  cancelled: number;
+  due: number;
+  raised: number;
+  salesRaised: number;
+  itemsTotal: number;
+  itemsDone: number;
+}
+
+export interface EventIncome { id: string; description: string; amount: number; date: string; }
+
+export interface EventCouple { id: string; noivoName: string; noivaName: string; status: string; paymentStatus: string; paymentAmount: number; }
+
+export type EventRegistrationStatus = 'Convidado' | 'Inscrito' | 'Confirmado' | 'Cancelado';
+export type EventPaymentStatus = 'Pendente' | 'Parcial' | 'Pago' | 'Isento';
+
+export interface EventRegistration {
+  id: string;
+  eventId: string;
+  memberId: string | null;
+  teamId: string | null;
+  name: string;
+  phone: string;
+  email: string;
+  guests: number;
+  status: EventRegistrationStatus;
+  amountDue: number;
+  amountPaid: number;
+  paymentStatus: EventPaymentStatus;
+  source: 'equipe' | 'usuario' | 'manual' | 'convite' | 'link';
+  notes: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export type EventItemStatus = 'Pendente' | 'Confirmado' | 'Entregue';
+
+export interface EventItem {
+  id: string;
+  eventId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  teamId: string | null;
+  assignedTo: string;
+  status: EventItemStatus;
 }
 
 export interface EventSale {

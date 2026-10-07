@@ -14,7 +14,11 @@ O sistema agora utiliza **React Router DOM** para gerenciar a navegação com UR
 | `/equipes` | Lista de Equipes Base | Teams | ADMIN, COORD_CIDADE |
 | `/equipes/:teamSlug` | Detalhes de uma Equipe | TeamDetail | ADMIN, COORD_CIDADE |
 | `/minha-equipe` | Minha Equipe (visão do membro) | MyTeam | TESOUREIRO, COORD_EQUIPE_BASE, USUARIO |
-| `/eventos` | Eventos e Metas | Events | ADMIN, COORD_CIDADE, COORD_ESTADO |
+| `/eventos` | Lista de eventos (próximos, realizados, cancelados) | Events | todos os perfis |
+| `/eventos/novo` | Novo evento | EventFormPage | coordenação geral |
+| `/eventos/:eventSlug` | Evento completo (ex.: `/eventos/retiro-de-casais?aba=financeiro`; abas `resumo`, `inscritos`, `itens`, `equipes`, `vendas`, `financeiro`, `graficos`) | EventDetail | todos os perfis |
+| `/eventos/:eventSlug/editar` | Editar evento (abas `dados`, `taxa`, `equipes`, `gastos`) | EventFormPage | coordenação geral |
+| `/eventos/inscricao/:token` | Inscrição pública no evento externo (sem login) | EventPublicForm | público |
 | `/financeiro` | Tesouraria Equipes | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/financeiro/:teamSlug` | Tesouraria de uma equipe (ex.: `/financeiro/equipe-sao-jose?mes=7&ano=2026`) | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
 | `/livro-caixa` | Livro Caixa | GeneralLedger | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |

@@ -40,7 +40,9 @@ import {
   PhoneCall,
   LayoutGrid,
   Zap,
-  Clock
+  Clock,
+  CircleDot,
+  Minus
 } from 'lucide-react';
 import { api } from '../api';
 import { Payment, Member, EventSale, Event, BaseTeam, UserRoleType } from '../types';
@@ -74,6 +76,8 @@ import { monthlyAmountForMember, monthlyContributors } from '../utils/paymentRul
 import { isPaidPayment, matchesReference, receivedInPeriod, monthlySettlement, formatPaymentDate, localDateToday, paidLate } from '../utils/paymentAccounting';
 import toast from 'react-hot-toast';
 import { FamilyPaymentModal } from '../components/FamilyPaymentModal';
+import { EVENTS_BASE, eventPath, eventStatus, money as eventMoney, percent as eventPercent } from '../utils/events';
+import { dateLabel as eventDateLabel } from '../utils/dates';
 import { useUrlTab } from '../src/hooks/useUrlTab';
 import type { BillingUnit } from '../utils/billingUnits';
 
@@ -87,11 +91,30 @@ const TABS = [
   { id: 'familias',    label: 'Famílias',      icon: Heart },
   { id: 'membros',     label: 'Membros',        icon: Users },
   { id: 'mensalidades',label: 'Mensalidades',   icon: BadgeDollarSign },
-  { id: 'eventos',     label: 'Metas Equipe',   icon: Ticket },
+  { id: 'eventos',     label: 'Eventos',        icon: Ticket },
   { id: 'historico',   label: 'Extrato',        icon: History },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
+
+/** Situação de um mês na grade de mensalidades. A legenda e as células usam esta mesma tabela, então sempre combinam. */
+const MONTH_KINDS = {
+  paid: { label: 'Pago', hint: 'pago no mês ou adiantado', icon: Check, chip: 'bg-emerald-500 text-white' },
+  late: { label: 'Pago em atraso', hint: 'quitado depois do mês', icon: Clock, chip: 'bg-amber-100 text-amber-700 border border-amber-300' },
+  partial: { label: 'Parcial', hint: 'só parte da família pagou', icon: CircleDot, chip: 'bg-orange-100 text-orange-700 border border-orange-300' },
+  open: { label: 'Em atraso', hint: 'mês vencido sem pagamento', icon: X, chip: 'bg-rose-500 text-white' },
+  upcoming: { label: 'A vencer', hint: 'mês que ainda não chegou', icon: null, chip: 'bg-slate-50 border border-slate-200' },
+  none: { label: 'Sem cobrança', hint: 'isento ou sem contribuinte', icon: Minus, chip: 'bg-slate-50 border border-slate-100 text-slate-300' },
+} as const;
+type MonthKind = keyof typeof MONTH_KINDS;
+
+const MonthChip: React.FC<{ kind: MonthKind; label?: string }> = ({ kind, label }) => {
+  const config = MONTH_KINDS[kind];
+  const Icon = config.icon;
+  return <span role="img" aria-label={label || config.label} className={cn('mx-auto flex h-6 w-6 items-center justify-center rounded-md', config.chip)}>
+    {Icon ? <Icon className="h-3.5 w-3.5" strokeWidth={2.5} /> : <span className="h-1 w-1 rounded-full bg-slate-300" />}
+  </span>;
+};
 
 const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const shortMonths = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -434,96 +457,73 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
               <StatCard title={`Total Acumulado ${viewYear}`} value={`R$ ${financeStats.yearlyTotal.toFixed(2)}`} icon={BarChart3} color="info" />
             </StatGrid>
 
-            <ContentCard title="Controle Financeiro" className="overflow-hidden">
-               <div className="flex flex-col md:flex-row gap-3">
-                  <div className="flex-1 grid grid-cols-2 gap-3">
-                    <Select
-                      label="Ano"
-                      value={String(viewYear)}
-                      size="sm"
-                      onChange={e => setViewYear(parseInt(e.target.value))}
-                      options={[2024, 2025, 2026, 2027].map(y => ({ value: String(y), label: String(y) }))}
-                    />
-                    <Select
-                      label="Mês de Visão"
-                      value={String(viewMonth)}
-                      size="sm"
-                      onChange={e => setViewMonth(parseInt(e.target.value))}
-                      options={monthNames.map((n, i) => ({ value: String(i + 1), label: n }))}
-                    />
-                  </div>
-                  <div className="md:w-56 p-4 bg-blue-50 rounded-lg border border-blue-100 flex flex-col justify-center">
-                     <p className="text-[11px] font-semibold text-blue-400 tracking-normal mb-0.5">Expectativa Mensal</p>
-                     <p className="text-base font-semibold text-blue-700 tracking-tight">
-                        R$ {(() => {
-                          const contributors = monthlyContributors(membersState);
-                          return contributors.reduce((total, member) => total + monthlyAmountForMember(member, contributors, defaultMonthlyAmount), 0).toFixed(2);
-                        })()}
-                     </p>
-                  </div>
-               </div>
-            </ContentCard>
+            <FilterLine>
+              <FilterLineSection grow>
+                <FilterLineItem><Select aria-label="Ano" size="sm" wrapperClassName="w-28" value={String(viewYear)} onChange={e => setViewYear(parseInt(e.target.value))}
+                  options={[2024, 2025, 2026, 2027].map(y => ({ value: String(y), label: String(y) }))} /></FilterLineItem>
+                <FilterLineItem><Select aria-label="Mês de visão" size="sm" wrapperClassName="w-44" value={String(viewMonth)} onChange={e => setViewMonth(parseInt(e.target.value))}
+                  options={monthNames.map((n, i) => ({ value: String(i + 1), label: n }))} /></FilterLineItem>
+              </FilterLineSection>
+              <FilterLineSection align="right">
+                <span className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs text-blue-800">
+                  Expectativa mensal <strong className="ml-1 font-semibold">R$ {(() => {
+                    const contributors = monthlyContributors(membersState);
+                    return contributors.reduce((total, member) => total + monthlyAmountForMember(member, contributors, defaultMonthlyAmount), 0).toFixed(2);
+                  })()}</strong>
+                </span>
+              </FilterLineSection>
+            </FilterLine>
 
             <ContentCard padding="none">
-              <p className="px-5 py-3 text-xs text-slate-600">Verde: pago no mês ou antecipado · Amarelo: pago em atraso ou parcial · Vermelho: em aberto. O caixa considera a data do recebimento.</p>
+              <ul aria-label="Legenda das situações" className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-100 px-3 py-2.5">
+                {(Object.keys(MONTH_KINDS) as MonthKind[]).map(kind => (
+                  <li key={kind} className="flex items-center gap-1.5 text-xs text-slate-600" title={MONTH_KINDS[kind].hint}>
+                    <span className="[&>span]:h-5 [&>span]:w-5"><MonthChip kind={kind} /></span>{MONTH_KINDS[kind].label}
+                  </li>
+                ))}
+                <li className="ml-auto text-[11px] text-slate-500">O caixa considera a data do recebimento.</li>
+              </ul>
               <div className="overflow-x-auto no-scrollbar">
                 <table className="w-full text-left border-separate border-spacing-0">
                   <thead>
                     <tr className="bg-slate-50">
-                      <th className="px-3 py-3 text-[11px] font-semibold text-slate-400 tracking-normal border-b border-slate-100 sticky left-0 bg-slate-50 z-20">Unidade Familiar</th>
+                      <th scope="col" className="px-3 py-2.5 text-[11px] font-semibold text-slate-500 border-b border-slate-100 sticky left-0 bg-slate-50 z-20 min-w-[150px]">Unidade familiar</th>
                       {shortMonths.map((m, idx) => (
-                        <th key={m} className={cn(
-                          "px-3 py-3 text-[11px] font-semibold text-slate-400 tracking-normal border-b border-slate-100 text-center",
-                          idx + 1 === viewMonth && "bg-blue-50 text-blue-600"
+                        <th scope="col" key={m} className={cn(
+                          "w-10 px-1 py-2.5 text-[11px] font-semibold text-slate-500 border-b border-slate-100 text-center",
+                          idx + 1 === viewMonth && "bg-blue-50 text-blue-700"
                         )}>{m}</th>
                       ))}
-                      <th className="px-3 py-3 text-[11px] font-semibold text-slate-400 tracking-normal border-b border-slate-100 text-center">Ação</th>
+                      <th scope="col" className="w-12 px-2 py-2.5 text-[11px] font-semibold text-slate-500 border-b border-slate-100 text-center"><span className="sr-only">Receber</span></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody>
                     {groupedMembers.map((group, idx) => (
-                      <tr key={idx} className="hover:bg-blue-50/10 transition-colors group">
-                        <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-white z-10 border-r border-slate-50">
-                           <div className="flex items-center gap-2.5">
-                              <div className={cn(
-                                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border border-slate-100",
-                                group.atrasos > 0 ? "bg-rose-50 text-rose-500" : "bg-emerald-50 text-emerald-600"
-                              )}>
-                                 {group.type === 'couple' ? <Heart className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                              </div>
-                              <p className="text-xs font-semibold text-slate-800 tracking-tight truncate max-w-[140px]">{group.displayName}</p>
-                           </div>
-                        </td>
+                      <tr key={idx} className="hover:bg-slate-50/60 transition-colors group">
+                        <th scope="row" className="px-3 py-2 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-b border-slate-50 border-r text-left font-normal">
+                          <div className="flex items-center gap-2">
+                            <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0", group.atrasos > 0 ? "bg-rose-50 text-rose-500" : "bg-emerald-50 text-emerald-600")}>
+                              {group.type === 'couple' ? <Heart className="w-3 h-3" /> : <Users className="w-3 h-3" />}
+                            </div>
+                            <p className="text-xs font-medium text-slate-800 truncate max-w-[130px]">{group.displayName}</p>
+                          </div>
+                        </th>
                         {group.monthsStatus.map((isPaid: boolean, mIdx: number) => {
                           const isFuture = mIdx + 1 > viewMonth;
-                          const hasNoMonthlyCharge = group.payingMembers.length === 0;
                           const settlement = group.monthSettlements[mIdx];
+                          const kind: MonthKind = group.payingMembers.length === 0 ? 'none'
+                            : settlement.status === 'late' ? 'late' : settlement.status === 'partial' ? 'partial' : isPaid ? 'paid' : isFuture ? 'upcoming' : 'open';
                           return (
-                            <td key={mIdx} title={settlement.description} className={cn("px-1.5 py-3 text-center", mIdx + 1 === viewMonth && "bg-blue-50/30")}>
-                               <div className={cn(
-                                 "w-5 h-5 rounded-md mx-auto flex items-center justify-center transition-all",
-                                 settlement.status === 'late' || settlement.status === 'partial' ? "bg-amber-100 text-amber-800 border border-amber-300" :
-                                 isPaid ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" : 
-                                 hasNoMonthlyCharge || isFuture ? "bg-slate-50 text-slate-200 border border-slate-100" : 
-                                 "bg-rose-500 text-white shadow-md shadow-rose-100"
-                               )}>
-                                 {settlement.status === 'late' || settlement.status === 'partial' ? <Clock className="w-3 h-3" /> : isPaid ? <Check className="w-2.5 h-2.5" /> : hasNoMonthlyCharge || isFuture ? null : <X className="w-2.5 h-2.5" />}
-                               </div>
-                               <span className="block mt-1 text-[11px] leading-tight min-w-[48px] text-slate-600">{isFuture && settlement.status === 'pending' ? 'A vencer' : settlement.status === 'pending' ? 'Em atraso' : settlement.label}</span>
+                            <td key={mIdx} title={`${monthNames[mIdx]}: ${kind === 'open' || kind === 'upcoming' || kind === 'none' ? MONTH_KINDS[kind].label : settlement.description}`}
+                              className={cn("px-1 py-2 border-b border-slate-50", mIdx + 1 === viewMonth && "bg-blue-50/40")}>
+                              <MonthChip kind={kind} label={`${monthNames[mIdx]}: ${MONTH_KINDS[kind].label}`} />
                             </td>
                           );
                         })}
-                        <td className="px-3 py-3 text-center">
-                          <IconButton 
-                            variant="primary" 
-                            size="xs" 
-                            className="w-7 h-7"
-                            disabled={group.payingMembers.length === 0}
-                            onClick={() => {
-                              openPayment(group);
-                            }}
-                          >
-                             <Plus className="w-3.5 h-3.5" />
+                        <td className="px-2 py-2 text-center border-b border-slate-50">
+                          <IconButton variant="primary" size="xs" className="w-7 h-7" aria-label={`Receber de ${group.displayName}`} title={group.payingMembers.length === 0 ? 'Sem contribuinte ativo' : 'Receber mensalidade'}
+                            disabled={group.payingMembers.length === 0} onClick={() => openPayment(group)}>
+                            <Plus className="w-3.5 h-3.5" />
                           </IconButton>
                         </td>
                       </tr>
@@ -536,41 +536,41 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
         )}
 
         {/* ── TAB METAS EVENTOS ────────────────────────────────────────────── */}
-        {activeTab === 'eventos' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {events.map(event => {
-              const teamQuota = event.teamQuotas.find(q => q.teamId === teamId);
-              const teamSales = localSales.filter(s => s.eventId === event.id).reduce((acc, s) => acc + s.amount, 0);
-              const progress = teamQuota ? (teamSales / teamQuota.quotaValue) * 100 : 0;
-              
-              return (
-                <PanelCard key={event.id} title={event.name} description="Meta coletiva da equipe" icon={Ticket}>
-                  <div className="p-3 space-y-5">
-                     <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                           <p className="text-[11px] font-semibold text-slate-400 tracking-normal mb-0.5">Cota Equipe</p>
-                           <p className="text-base font-semibold text-slate-900">R$ {teamQuota?.quotaValue.toFixed(2) || '0.00'}</p>
-                        </div>
-                        <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
-                           <p className="text-[11px] font-semibold text-emerald-400 tracking-normal mb-0.5">Realizado</p>
-                           <p className="text-base font-semibold text-emerald-600">R$ {teamSales.toFixed(2)}</p>
-                        </div>
-                     </div>
-                     <div className="space-y-1.5">
-                        <div className="flex justify-between text-[11px] font-semibold uppercase text-slate-400">
-                          <span>Progresso da Campanha</span>
-                          <span className="text-blue-600">{progress.toFixed(1)}%</span>
-                        </div>
-                        <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-600 rounded-full transition-all duration-1000" style={{ width: `${Math.min(progress, 100)}%` }} />
-                        </div>
-                     </div>
+        {activeTab === 'eventos' && (() => {
+          const upcoming = events.map(event => ({ event, status: eventStatus(event) })).filter(({ status }) => status.phase === 'em-breve' || status.phase === 'hoje').sort((x, y) => x.event.date.localeCompare(y.event.date));
+          if (!upcoming.length) return <ContentCard><EmptyState icon={Ticket} title="Nenhum evento próximo" description="Quando houver um evento, a equipe pode se inscrever e acompanhar a meta aqui." action={<Button variant="outline" size="sm" onClick={() => navigate(EVENTS_BASE)}>Ver todos os eventos</Button>} /></ContentCard>;
+          return <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {upcoming.map(({ event, status }) => {
+              const team = event.teamStats?.find(item => item.teamId === teamId);
+              const quota = event.teamQuotas.find(q => q.teamId === teamId)?.quotaValue || 0;
+              const fee = event.hasFee !== false && Number(event.ticketValue) > 0;
+              const pct = eventPercent(team?.raised || 0, quota);
+              const open = () => navigate(eventPath(event, events));
+              return <ContentCard key={event.id} padding="none" className="flex h-full flex-col overflow-hidden">
+                <div className="flex flex-1 flex-col gap-3 p-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge size="sm" color={event.kind === 'externo' ? 'purple' : 'info'}>{event.kind === 'externo' ? 'Externo' : 'Interno'}</Badge>
+                    <Badge size="sm" color={fee ? 'warning' : 'success'}>{fee ? `Taxa ${eventMoney(Number(event.ticketValue))}` : 'Sem taxa'}</Badge>
+                    <span className="ml-auto text-xs text-slate-500">{status.label}</span>
                   </div>
-                </PanelCard>
-              );
+                  <div><h3 className="text-sm font-semibold text-slate-900 break-words">{event.name}</h3><p className="mt-1 text-xs text-slate-500">{eventDateLabel(event.date)}{event.location ? ` · ${event.location}` : ''}</p></div>
+                  <dl className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs">
+                    <div><dt className="text-[11px] text-slate-500">Inscritos da equipe</dt><dd className="mt-0.5 font-semibold tabular-nums text-slate-900">{team?.registered || 0}</dd></div>
+                    {fee && <div><dt className="text-[11px] text-slate-500">Arrecadado pela equipe</dt><dd className="mt-0.5 font-semibold tabular-nums text-emerald-700">{eventMoney(team?.raised || 0)}</dd></div>}
+                  </dl>
+                  {fee && quota > 0 && <div>
+                    <div className="mb-1 flex justify-between text-[11px] text-slate-500"><span>Meta da equipe {eventMoney(quota)}</span><span>{pct}%</span></div>
+                    <div role="progressbar" aria-label="Meta da equipe" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100} className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${pct ?? 0}%` }} /></div>
+                  </div>}
+                </div>
+                <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
+                  <Button size="xs" className="flex-1" onClick={() => navigate(`${eventPath(event, events)}?aba=inscritos`)}>Inscrever a equipe</Button>
+                  <Button variant="outline" size="xs" onClick={open}>Detalhes</Button>
+                </div>
+              </ContentCard>;
             })}
-          </div>
-        )}
+          </div>;
+        })()}
 
         {/* ── TAB HISTÓRICO ─────────────────────────────────────────────────── */}
         {activeTab === 'historico' && (

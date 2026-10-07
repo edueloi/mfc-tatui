@@ -101,10 +101,9 @@ export const navigationSections: NavSection[] = [
     label: "Config",
     items: [
       {
-        name: 'Eventos/Metas',
+        name: 'Eventos',
         icon: Ticket,
         path: '/eventos',
-        roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE, UserRoleType.COORD_ESTADO]
       },
       {
         name: 'Usuários',

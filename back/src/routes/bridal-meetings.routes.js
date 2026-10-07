@@ -5,6 +5,10 @@ const { v4: uuid } = require('uuid');
 const { db } = require('../db-mysql');
 const { rowToBridalMeeting } = require('../models/converters');
 const { nowIso, toInt } = require('../utils/helpers');
+const { eventForNewMeeting, syncEventWithMeeting, detachEventFromMeeting } = require('../utils/events-schema');
+
+// O evento ligado ao encontro é cuidado em segundo plano: se falhar, o encontro continua salvo e o erro fica no log.
+const keepEventInSync = (action, id) => action(id).catch(error => console.error('Não foi possível sincronizar o evento do encontro:', error.message));
 
 const router = express.Router();
 
@@ -78,6 +82,7 @@ router.post('/', async (req, res) => {
     });
 
     const row = await db.prepare('SELECT * FROM bridal_meetings WHERE id = ?').get(id);
+    await keepEventInSync(eventForNewMeeting, id);
     res.status(201).json(rowToBridalMeeting(row));
   } catch (error) {
     console.error('Erro ao criar encontro:', error);
@@ -116,6 +121,7 @@ router.put('/:id', async (req, res) => {
     });
 
     const row = await db.prepare('SELECT * FROM bridal_meetings WHERE id = ?').get(id);
+    await keepEventInSync(syncEventWithMeeting, id);
     res.json(rowToBridalMeeting(row));
   } catch (error) {
     console.error('Erro ao atualizar encontro:', error);
@@ -125,6 +131,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
+    await keepEventInSync(detachEventFromMeeting, req.params.id);
     await db.prepare('DELETE FROM bridal_meetings WHERE id = ?').run(req.params.id);
     res.status(204).end();
   } catch (error) {
