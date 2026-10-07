@@ -12,7 +12,7 @@ O sistema agora utiliza **React Router DOM** para gerenciar a navegação com UR
 | `/mfcistas` | Lista de MFCistas | Members | ADMIN, COORD_CIDADE, TESOUREIRO, COORD_ESTADO |
 | `/mfcistas/:memberId` | Perfil de um MFCista específico | MemberProfile | ADMIN, COORD_CIDADE, TESOUREIRO, COORD_ESTADO |
 | `/equipes` | Lista de Equipes Base | Teams | ADMIN, COORD_CIDADE |
-| `/equipes/:teamId` | Detalhes de uma Equipe | TeamDetail | ADMIN, COORD_CIDADE |
+| `/equipes/:teamSlug` | Detalhes de uma Equipe | TeamDetail | ADMIN, COORD_CIDADE |
 | `/minha-equipe` | Minha Equipe (visão do membro) | MyTeam | TESOUREIRO, COORD_EQUIPE_BASE, USUARIO |
 | `/eventos` | Eventos e Metas | Events | ADMIN, COORD_CIDADE, COORD_ESTADO |
 | `/financeiro` | Tesouraria Equipes | Finance | ADMIN, COORD_CIDADE, COORD_ESTADO, TESOUREIRO |
@@ -23,7 +23,7 @@ O sistema agora utiliza **React Router DOM** para gerenciar a navegação com UR
 ### Parâmetros de URL
 
 - `:memberId` - ID único do membro (exemplo: `/mfcistas/m1`)
-- `:teamId` - ID único da equipe (exemplo: `/equipes/t1`)
+- `:teamSlug` - nome da equipe em formato de URL (exemplo: `/equipes/equipe-sao-jose`); links antigos com o id ainda funcionam e são redirecionados
 
 ### Navegação Programática
 

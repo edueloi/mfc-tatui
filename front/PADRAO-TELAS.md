@@ -7,6 +7,8 @@ Referência extraída das telas já ajustadas:
 | Detalhes do MFCista | `views/MemberProfile.tsx` | páginas de **detalhe/leitura** (perfil, ficha) |
 | Lançamentos | `views/DailyEntries.tsx` | páginas de **listagem + resumo** (KPIs, filtro, tabela, gráficos) |
 | Minha equipe | `views/MyTeam.tsx` | páginas **com várias abas** e cards em grade |
+| Equipes Base (lista + detalhe) | `views/Teams.tsx` + `views/TeamDetail.tsx` + `components/TeamFormModal.tsx` | **lista de cards** + detalhe com membros e resumo, URL por nome |
+| Relatórios | `views/Reports.tsx` | **painel de indicadores** (filtros de período, KPIs, abas Visão geral/Tabela) |
 | Criar/Editar MFCista | `views/MemberFormPage.tsx` + `components/MemberForm.tsx` | **formulários** de cadastro (mesma tela cria e edita) |
 
 Regra geral: **toda tela é montada só com os componentes de `components/ui`** (importados de `'../components/ui'`). Não criar HTML/Tailwind solto para o que já existe como componente. Visual: fundo branco, borda `slate-200`, cantos `rounded-lg`, **sem sombras fortes**, azul como cor de destaque, texto pequeno e denso (`text-xs` / `text-[13px]`).
@@ -43,7 +45,7 @@ Regra geral: **toda tela é montada só com os componentes de `components/ui`** 
 
 ```tsx
 const tabs = [{ id: 'pessoal', label: 'Perfil', icon: User }, ...] as const;
-<Tabs items={tabs} value={activeTab} onChange={setActiveTab} label="Detalhes do MFCista">
+<Tabs<typeof tabs[number]['id']> items={tabs} value={activeTab} onChange={setActiveTab} label="Detalhes do MFCista">
   {activeTab === 'pessoal' && <div className="space-y-3">...</div>}
 </Tabs>
 ```
@@ -51,6 +53,8 @@ const tabs = [{ id: 'pessoal', label: 'Perfil', icon: User }, ...] as const;
 - Definir `tabs` como constante **fora do componente** com `as const` e tipar o estado com `typeof tabs[number]['id']`.
 - `label` é obrigatório (acessibilidade, vira `aria-label`).
 - Um ícone lucide por aba, rótulo curto (1–2 palavras).
+- **Passe o genérico** (`<Tabs<typeof tabs[number]['id']> …>`); sem ele o TypeScript infere `string` e acusa erro no `onChange={setActiveTab}`. O mesmo vale para `FilterLineSegmented` com estado `string` (`onChange={v => set(String(v))}`).
+- `Switch` usa `onCheckedChange`, não `onChange` (com `onChange` o botão não faz nada).
 - Renderizar por `activeTab === 'x' && ...`; dentro de cada aba, `space-y-3`.
 - Ao trocar de registro (mudou o `id` da rota), resetar a aba (`setActiveTab('pessoal')`).
 
@@ -200,6 +204,20 @@ const save = async () => {
 - Toasts com emoji (✅ 🎉) e rótulo de botão "Salvar Alterações" também ao criar — preferir "Salvar" / "Cadastrar".
 - Padrões fixos no `blank` (`Tatui`, `SP`, `Sudeste`, `Catolica`, `O+`) pré-selecionam respostas que o usuário pode esquecer de trocar; para outras telas, deixar vazio quando não for um padrão real.
 - Campos obrigatórios só alimentam a barra de progresso; **não há validação** que impeça salvar sem nome/CPF. Em telas novas, validar e mostrar erro no campo antes de enviar.
+
+## 8.2 URL com nome (slug) em vez de id
+
+Usado em Equipes: `/equipes/equipe-sao-jose` em vez de `/equipes/t1`.
+
+- `utils/teamSlug.ts`: `teamSlug(team, teams)`, `findTeamByParam(teams, param)` e `teamPath(team, teams)`. Nome repetido ganha a cidade no slug e, se ainda colidir, o id.
+- Rota: `equipes/:teamSlug`. Toda navegação usa `navigate(teamPath(team, teams))`; nunca montar a URL com `team.id`.
+- A tela de detalhe resolve a entidade pelo slug **ou pelo id** (links antigos continuam abrindo) e faz `navigate(path, { replace: true })` para a URL com nome. O mesmo vale depois de renomear.
+- Para outra entidade, copiar o par `slugify`/`find…ByParam` e seguir a mesma ideia.
+- Limitação: o slug vem do nome; se criarem outra equipe com o mesmo nome, o slug da primeira passa a incluir a cidade.
+
+## 8.3 Conferir o formato da API antes de montar gráficos
+
+A tela de Relatórios lia `value`, `color` e `name`, que o backend (`dashboard.routes.js`) nunca enviou, então os gráficos ficavam vazios/0%. Antes de montar uma tela, abra a rota do backend e tipe a resposta (ver `interface Summary` em `Reports.tsx`). Não inventar dados no front (a linha de "meta" era `valor + 5`, e os gráficos de faixa etária/aniversário do detalhe de equipe eram números fixos).
 
 ## 9. Tokens visuais (copiar à risca)
 

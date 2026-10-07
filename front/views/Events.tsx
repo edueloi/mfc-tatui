@@ -610,7 +610,7 @@ const EventsView: React.FC = () => {
                 </div>
                 <Switch
                   checked={formData.showOnDashboard}
-                  onChange={v => setFormData({ ...formData, showOnDashboard: v })}
+                  onCheckedChange={v => setFormData({ ...formData, showOnDashboard: v })}
                 />
               </div>
             </div>

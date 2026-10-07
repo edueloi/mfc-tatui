@@ -138,7 +138,7 @@ const DailyEntries: React.FC = () => {
           <StatCard title="Total de saídas" value={formatCurrency(Math.abs(stats?.summary.total_expenses || 0))} icon={TrendingDown} color="danger" />
           <StatCard title="Saldo" value={formatCurrency(stats?.summary.balance || 0)} icon={DollarSign} color={(stats?.summary.balance || 0) >= 0 ? 'info' : 'danger'} />
         </StatGrid>
-        <Tabs items={[{ id: 'entries', label: 'Lançamentos', icon: FileSpreadsheet }, { id: 'summary', label: 'Resumo', icon: TrendingUp }]} value={activeTab} onChange={setActiveTab} label="Visualização dos lançamentos">
+        <Tabs<'entries' | 'summary'> items={[{ id: 'entries', label: 'Lançamentos', icon: FileSpreadsheet }, { id: 'summary', label: 'Resumo', icon: TrendingUp }]} value={activeTab} onChange={setActiveTab} label="Visualização dos lançamentos">
           {activeTab === 'entries' ? <div className="space-y-3">
             <FilterLine>
               <FilterLineSection grow><FilterLineSearch aria-label="Buscar lançamentos" value={searchTerm} onChange={setSearchTerm} placeholder="Descrição, conta ou centro de custo…" /></FilterLineSection>

@@ -343,7 +343,7 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, userRole }) => 
           description={[[team?.city, team?.state].filter(Boolean).join(' / '), `${groupedMembers.length} famílias`, `${membersState.length} membros`].filter(Boolean).join(' · ')}
           action={<div className="w-full sm:w-64"><Combobox placeholder="Localizar família…" options={groupedMembers.map(group => ({ value: group.familyName, label: group.displayName, subtitle: group.familyName }))}
             onChange={value => { const family = groupedMembers.find(group => group.familyName === value); if (family) { setSelectedFamily(family); setShowDetailModal(true); } }} /></div>} />
-        <Tabs items={TABS} value={activeTab} onChange={setActiveTab} label="Seções da minha equipe">
+        <Tabs<TabId> items={TABS} value={activeTab} onChange={setActiveTab} label="Seções da minha equipe">
         {/* ── TAB FAMÍLIAS ──────────────────────────────────────────────────── */}
         {activeTab === 'familias' && (
           <div className="space-y-4">

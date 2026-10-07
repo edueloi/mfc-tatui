@@ -1,347 +1,168 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Layers,
-  Plus,
-  MapPin,
-  Users,
-  ChevronRight,
-  Edit2,
-  Trash2,
-  Crown,
-  Baby,
-  AlertTriangle,
-} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Layers, Plus, MapPin, Users, Pencil, Trash2, Baby, AlertTriangle, ArrowRight, Loader2 } from 'lucide-react';
 import { api } from '../api';
-import { BaseTeam, City } from '../types';
+import { BaseTeam } from '../types';
 import {
-  PageWrapper,
-  SectionTitle,
-  StatGrid,
-  StatCard,
-  ContentCard,
-  FilterLine,
-  FilterLineSection,
-  FilterLineItem,
-  FilterLineSearch,
-  FilterLineSegmented,
-  Select,
-  Input,
-  Switch,
-  Button,
-  Modal,
-  ModalFooter,
-  ConfirmModal,
-  EmptyState,
-  Badge,
+  PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
+  FilterLineSegmented, Select, Button, IconButton, Modal, ModalFooter, ConfirmModal, EmptyState, Badge,
 } from '../components/ui';
+import { TeamFormModal } from '../components/TeamFormModal';
+import { normalizeDirectoryText } from '../utils/memberDirectory';
+import { teamPath } from '../utils/teamSlug';
+
+const sortOptions = [
+  { value: 'name', label: 'Por nome' },
+  { value: 'members', label: 'Por membros' },
+  { value: 'city', label: 'Por cidade' },
+];
 
 const Teams: React.FC = () => {
   const navigate = useNavigate();
-  const [showModal, setShowModal] = useState(false);
+  const [teams, setTeams] = useState<BaseTeam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [showForm, setShowForm] = useState(false);
   const [editingTeam, setEditingTeam] = useState<BaseTeam | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BaseTeam | null>(null);
-  const [newTeam, setNewTeam] = useState({ name: '', city: 'Tatuí', state: 'SP', isYouth: false });
-  const [teams, setTeams] = useState<BaseTeam[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
-  const [estados, setEstados] = useState<Array<{ id: number; sigla: string; nome: string }>>([]);
+  const [deleting, setDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [sortBy, setSortBy] = useState('name');
-  const [selectedCityFilter, setSelectedCityFilter] = useState('all');
-
-  const loadData = () => {
-    api.getTeams().then(setTeams).catch(() => setTeams([]));
-    api.getCities().then(setCities).catch(() => setCities([]));
-  };
+  const [cityFilter, setCityFilter] = useState('all');
 
   useEffect(() => {
-    loadData();
-    api.getEstados().then(setEstados).catch(() => setEstados([]));
-    window.addEventListener('focus', loadData);
-    const iv = setInterval(loadData, 30000);
-    return () => { window.removeEventListener('focus', loadData); clearInterval(iv); };
-  }, []);
+    let cancelled = false;
+    const load = () => api.getTeams()
+      .then((items: BaseTeam[]) => { if (!cancelled) { setTeams(items); setError(false); } })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    load();
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.removeEventListener('focus', load); };
+  }, [retry]);
 
-  useEffect(() => {
-    if (cities.length > 0) {
-      setNewTeam(prev => ({ ...prev, city: prev.city || cities[0].name, state: prev.state || cities[0].uf }));
-    }
-  }, [cities]);
+  const openForm = (team: BaseTeam | null) => { setEditingTeam(team); setShowForm(true); };
 
-  const handleCreate = (saveAndNew: boolean) => {
-    if (newTeam.name.trim().length < 3) return;
-    api.createTeam(newTeam)
-      .then((created: BaseTeam) => {
-        setTeams(prev => [created, ...prev]);
-        if (!saveAndNew) { setShowModal(false); setEditingTeam(null); }
-        setNewTeam({ name: '', city: newTeam.city, state: newTeam.state, isYouth: false });
-      })
-      .catch(console.error);
+  const handleSaved = (saved: BaseTeam, mode: 'created' | 'updated') =>
+    setTeams(prev => mode === 'created' ? [saved, ...prev] : prev.map(team => team.id === saved.id ? { ...team, ...saved } : team));
+
+  const handleDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await api.deleteTeam(deleteTarget.id);
+      setTeams(prev => prev.filter(team => team.id !== deleteTarget.id));
+      toast.success('Equipe excluída.');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível excluir a equipe.');
+    } finally { setDeleting(false); }
   };
 
-  const handleUpdate = () => {
-    if (!editingTeam || newTeam.name.trim().length < 3) return;
-    api.updateTeam(editingTeam.id, newTeam)
-      .then((updated: BaseTeam) => {
-        setTeams(prev => prev.map(t => t.id === editingTeam.id ? updated : t));
-        setShowModal(false);
-        setEditingTeam(null);
-        setNewTeam({ name: '', city: 'Tatuí', state: 'SP', isYouth: false });
-      })
-      .catch(console.error);
-  };
+  const baseCount = teams.filter(team => !team.isYouth).length;
+  const youthCount = teams.length - baseCount;
+  const totalMembers = teams.reduce((total, team) => total + (team.memberCount || 0), 0);
+  const attentionCount = teams.filter(team => (team.memberCount || 0) <= 2).length;
+  const cityOptions = [{ value: 'all', label: 'Todas as cidades' }, ...Array.from(new Set(teams.map(team => team.city))).sort().map(city => ({ value: city, label: city }))];
 
-  const handleEdit = (team: BaseTeam) => {
-    setEditingTeam(team);
-    setNewTeam({ name: team.name, city: team.city, state: team.state, isYouth: team.isYouth || false });
-    setShowModal(true);
-  };
-
-  const handleDeleteConfirm = () => {
-    if (!deleteTarget || (deleteTarget.memberCount && deleteTarget.memberCount > 0)) return;
-    api.deleteTeam(deleteTarget.id)
-      .then(() => { setTeams(prev => prev.filter(t => t.id !== deleteTarget.id)); setDeleteTarget(null); })
-      .catch(() => setDeleteTarget(null));
-  };
-
-  const baseTeams = teams.filter(t => !t.isYouth);
-  const youthTeams = teams.filter(t => t.isYouth);
-  const totalMembers = teams.reduce((acc, t) => acc + (t.memberCount || 0), 0);
-  const teamsAtRisk = teams.filter(t => (t.memberCount || 0) <= 2).length;
-  const cityOptions = [
-    { value: 'all', label: 'Todas as cidades' },
-    ...Array.from(new Set(teams.map(t => t.city))).sort().map(c => ({ value: c, label: c })),
-  ];
-  const sortOptions = [
-    { value: 'name', label: 'Por nome' },
-    { value: 'members', label: 'Por membros' },
-    { value: 'city', label: 'Por cidade' },
-  ];
-  const canSave = newTeam.name.trim().length >= 3 && newTeam.city.trim() !== '' && newTeam.state.trim() !== '';
-
+  const query = normalizeDirectoryText(searchTerm);
   const filteredTeams = teams
-    .filter(t => {
-      const q = searchTerm.toLowerCase();
-      const matchSearch = t.name.toLowerCase().includes(q) || t.city.toLowerCase().includes(q);
-      const matchType = filterType === 'all' || (filterType === 'base' && !t.isYouth) || (filterType === 'youth' && t.isYouth);
-      const matchCity = selectedCityFilter === 'all' || t.city === selectedCityFilter;
-      return matchSearch && matchType && matchCity;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'members') return (b.memberCount || 0) - (a.memberCount || 0);
-      if (sortBy === 'city') return a.city.localeCompare(b.city);
-      return a.name.localeCompare(b.name);
-    });
+    .filter(team => (!query || normalizeDirectoryText(`${team.name} ${team.city}`).includes(query))
+      && (filterType === 'all' || (filterType === 'youth') === !!team.isYouth)
+      && (cityFilter === 'all' || team.city === cityFilter))
+    .sort((a, b) => sortBy === 'members' ? (b.memberCount || 0) - (a.memberCount || 0) : sortBy === 'city' ? a.city.localeCompare(b.city, 'pt-BR') : a.name.localeCompare(b.name, 'pt-BR'));
+  const hasFilter = !!query || filterType !== 'all' || cityFilter !== 'all';
+  const clearFilters = () => { setSearchTerm(''); setFilterType('all'); setCityFilter('all'); };
+
+  if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando equipes…</div></PageWrapper>;
+
+  if (error && !teams.length) return <PageWrapper><ContentCard><EmptyState icon={Layers} title="Não foi possível carregar as equipes" description="Confira a conexão e tente novamente."
+    action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
+
+  const blockedDelete = !!deleteTarget && (deleteTarget.memberCount || 0) > 0;
 
   return (
     <PageWrapper>
-      <div className="space-y-6">
+      <div className="space-y-4">
+        <SectionTitle title="Equipes Base" icon={Layers} description={`${teams.length} equipes · ${totalMembers} MFCistas`}
+          action={<Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openForm(null)}>Nova equipe</Button>} />
 
-        {/* Header */}
-        <SectionTitle
-          title="Equipes Base"
-          icon={Layers}
-          action={
-            <Button variant="primary" size="sm" iconLeft={<Plus className="w-4 h-4" />}
-              onClick={() => {
-                setEditingTeam(null);
-                setNewTeam({ name: '', city: cities[0]?.name || 'Tatuí', state: cities[0]?.uf || 'SP', isYouth: false });
-                setShowModal(true);
-              }}>
-              Nova Equipe
-            </Button>
-          }
-        />
-
-        {/* Stats */}
         <StatGrid cols={4}>
-          <StatCard title="Equipes Base" value={baseTeams.length} icon={Layers} color="info" delay={0} />
-          <StatCard title="MFC Jovem" value={youthTeams.length} icon={Baby} color="purple" delay={0.05} />
-          <StatCard title="Total MFCistas" value={totalMembers} icon={Users} color="success" delay={0.1} />
-          <StatCard title="Equipes em atenção" value={teamsAtRisk} icon={AlertTriangle} color="warning" delay={0.15} />
+          <StatCard title="Equipes base" value={baseCount} icon={Layers} color="info" />
+          <StatCard title="MFC Jovem" value={youthCount} icon={Baby} color="purple" />
+          <StatCard title="Total de MFCistas" value={totalMembers} icon={Users} color="success" />
+          <StatCard title="Equipes em atenção" value={attentionCount} icon={AlertTriangle} color="warning" description="Com 2 membros ou menos" />
         </StatGrid>
 
-        {/* Filters */}
-        <ContentCard padding="md">
-          <FilterLine>
-            <FilterLineSection>
-              <FilterLineSearch value={searchTerm} onChange={setSearchTerm} placeholder="Buscar por nome ou cidade..." />
-            </FilterLineSection>
-            <FilterLineSection>
-              <FilterLineItem>
-                <FilterLineSegmented
-                  value={filterType}
-                  onChange={setFilterType}
-                  options={[
-                    { value: 'all', label: 'Todas' },
-                    { value: 'base', label: 'Base' },
-                    { value: 'youth', label: 'Jovem' },
-                  ]}
-                />
-              </FilterLineItem>
-              <FilterLineItem>
-                <Select value={selectedCityFilter} onChange={e => setSelectedCityFilter(e.target.value)} options={cityOptions} />
-              </FilterLineItem>
-              <FilterLineItem>
-                <Select value={sortBy} onChange={e => setSortBy(e.target.value)} options={sortOptions} />
-              </FilterLineItem>
-            </FilterLineSection>
-          </FilterLine>
-        </ContentCard>
+        <FilterLine>
+          <FilterLineSection grow>
+            <FilterLineItem grow><FilterLineSearch aria-label="Buscar equipes" value={searchTerm} onChange={setSearchTerm} placeholder="Nome da equipe ou cidade…" /></FilterLineItem>
+            <FilterLineItem>
+              <FilterLineSegmented value={filterType} onChange={value => setFilterType(String(value))} options={[{ value: 'all', label: 'Todas' }, { value: 'base', label: 'Base' }, { value: 'youth', label: 'Jovem' }]} />
+            </FilterLineItem>
+            <FilterLineItem><Select aria-label="Filtrar por cidade" value={cityFilter} onChange={event => setCityFilter(event.target.value)} options={cityOptions} /></FilterLineItem>
+            <FilterLineItem><Select aria-label="Ordenar equipes" value={sortBy} onChange={event => setSortBy(event.target.value)} options={sortOptions} /></FilterLineItem>
+          </FilterLineSection>
+          <FilterLineSection align="right">
+            <span className="text-xs text-slate-500">{filteredTeams.length} {filteredTeams.length === 1 ? 'equipe' : 'equipes'}</span>
+            {hasFilter && <Button variant="ghost" size="sm" onClick={clearFilters}>Limpar filtros</Button>}
+          </FilterLineSection>
+        </FilterLine>
 
-        {/* Team cards */}
         {filteredTeams.length === 0 ? (
-          <EmptyState
-            icon={Layers}
-            title="Nenhuma equipe encontrada"
-            description="Tente ajustar os filtros ou criar uma nova equipe."
-            action={
-              <Button variant="primary" size="sm" iconLeft={<Plus className="w-4 h-4" />}
-                onClick={() => { setEditingTeam(null); setNewTeam({ name: '', city: cities[0]?.name || 'Tatuí', state: cities[0]?.uf || 'SP', isYouth: false }); setShowModal(true); }}>
-                Nova Equipe
-              </Button>
-            }
-          />
+          <ContentCard><EmptyState icon={Layers} title="Nenhuma equipe encontrada"
+            description={hasFilter ? 'Ajuste os filtros para encontrar a equipe.' : 'Crie a primeira equipe para começar.'}
+            action={!hasFilter ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openForm(null)}>Nova equipe</Button> : undefined} /></ContentCard>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredTeams.map(team => (
-              <ContentCard
-                key={team.id}
-                padding="lg"
-                className="cursor-pointer hover:shadow-lg transition-all group"
-                onClick={() => navigate(`/equipes/${team.id}`)}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                    team.isYouth ? 'bg-violet-100 text-violet-600' : 'bg-amber-100 text-amber-600'
-                  }`}>
-                    {team.isYouth ? <Baby className="w-6 h-6" /> : <Crown className="w-6 h-6" />}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {filteredTeams.map(team => {
+              const members = team.memberCount || 0;
+              const open = () => navigate(teamPath(team, teams));
+              return (
+                <ContentCard key={team.id} padding="none" className="group flex h-full flex-col overflow-hidden transition-all hover:border-blue-200">
+                  <div className="flex flex-1 flex-col gap-3 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className={`flex h-7 w-7 items-center justify-center rounded-md border ${team.isYouth ? 'border-violet-100 bg-violet-50 text-violet-600' : 'border-blue-100 bg-blue-50 text-blue-600'}`}>
+                        {team.isYouth ? <Baby size={14} /> : <Layers size={14} />}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        {members <= 2 && <Badge color="warning" size="sm" dot>Poucos membros</Badge>}
+                        <Badge color={team.isYouth ? 'purple' : 'info'} size="sm">{team.isYouth ? 'MFC Jovem' : 'Base'}</Badge>
+                      </div>
+                    </div>
+                    <button type="button" className="text-left focus-visible:outline-blue-500" onClick={open}>
+                      <h3 className="text-sm font-semibold leading-tight text-slate-900 break-words transition-colors group-hover:text-blue-600">{team.name}</h3>
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><MapPin size={12} className="shrink-0 text-slate-400" />{team.city} / {team.state}</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><Users size={12} className="shrink-0 text-slate-400" />{members} {members === 1 ? 'membro' : 'membros'}</p>
+                    </button>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="xs" onClick={e => { e.stopPropagation(); handleEdit(team); }}>
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="xs" onClick={e => { e.stopPropagation(); setDeleteTarget(team); }}>
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </Button>
+                  <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
+                    <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={open}>Abrir equipe</Button>
+                    <IconButton variant="ghost" size="xs" aria-label={`Editar ${team.name}`} className="h-8 w-8" onClick={() => openForm(team)}><Pencil size={14} /></IconButton>
+                    <IconButton variant="ghost" size="xs" aria-label={`Excluir ${team.name}`} className="h-8 w-8" onClick={() => setDeleteTarget(team)}><Trash2 size={14} className="text-red-500" /></IconButton>
                   </div>
-                </div>
-
-                <h3 className="text-base font-black text-zinc-900 mb-3 group-hover:text-amber-600 transition-colors">
-                  {team.name}
-                </h3>
-
-                <div className="space-y-1.5 mb-4">
-                  <div className="flex items-center gap-2 text-zinc-500">
-                    <MapPin className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs font-semibold">{team.city}, {team.state}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-zinc-500">
-                    <Users className="w-3.5 h-3.5 text-zinc-400" />
-                    <span className="text-xs font-bold">{team.memberCount || 0} {team.memberCount === 1 ? 'membro' : 'membros'}</span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-zinc-100 flex items-center justify-between">
-                  {team.isYouth && (
-                    <span className="px-2.5 py-1 bg-violet-100 text-violet-700 rounded-lg text-[10px] font-black uppercase tracking-wide">
-                      MFC Jovem
-                    </span>
-                  )}
-                  <div className={`flex items-center gap-1.5 text-amber-600 font-bold text-xs ml-auto`}>
-                    Ver detalhes <ChevronRight className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-              </ContentCard>
-            ))}
+                </ContentCard>
+              );
+            })}
           </div>
         )}
-
       </div>
 
-      {/* ── Modal Criar/Editar ───────────────────────────────────────────────── */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditingTeam(null); }}
-        title={editingTeam ? 'Editar Equipe' : 'Nova Equipe Base'}
-        size="sm"
-        footer={
-          <ModalFooter>
-            {!editingTeam && (
-              <Button variant="outline" size="sm" disabled={!canSave} onClick={() => handleCreate(true)}>
-                Salvar e Criar Outra
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => { setShowModal(false); setEditingTeam(null); }}>
-              Cancelar
-            </Button>
-            <Button variant="primary" size="sm" disabled={!canSave} onClick={editingTeam ? handleUpdate : () => handleCreate(false)}>
-              {editingTeam ? 'Atualizar' : 'Criar Equipe'}
-            </Button>
-          </ModalFooter>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label="Nome da Equipe *"
-            placeholder="Ex: Equipe São José"
-            value={newTeam.name}
-            onChange={e => setNewTeam({ ...newTeam, name: e.target.value })}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Select
-              label="Estado"
-              value={newTeam.state}
-              onChange={e => setNewTeam({ ...newTeam, state: e.target.value })}
-              options={estados.map(e => ({ value: e.sigla, label: e.sigla }))}
-            />
-            <Select
-              label="Cidade"
-              value={newTeam.city}
-              onChange={e => setNewTeam({ ...newTeam, city: e.target.value })}
-              options={cities.map(c => ({ value: c.name, label: c.name }))}
-            />
-          </div>
-          <div className="flex items-center justify-between p-4 bg-violet-50 border border-violet-100 rounded-xl">
-            <div>
-              <p className="text-xs font-black text-violet-700 uppercase tracking-widest">Equipe MFC Jovem</p>
-              <p className="text-[10px] text-violet-500 font-medium mt-0.5">Marque se for uma equipe jovem</p>
-            </div>
-            <Switch checked={newTeam.isYouth} onChange={v => setNewTeam({ ...newTeam, isYouth: v })} />
-          </div>
-        </div>
-      </Modal>
+      <TeamFormModal isOpen={showForm} team={editingTeam} onClose={() => { setShowForm(false); setEditingTeam(null); }} onSaved={handleSaved} />
 
-      {/* ── Confirm Delete ───────────────────────────────────────────────────── */}
-      {deleteTarget && deleteTarget.memberCount && deleteTarget.memberCount > 0 ? (
-        <Modal
-          isOpen={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          title="Não é Possível Excluir"
-          size="sm"
-          footer={
-            <ModalFooter>
-              <Button variant="primary" size="sm" onClick={() => setDeleteTarget(null)}>Entendido</Button>
-            </ModalFooter>
-          }
-        >
-          <p className="text-sm text-zinc-600">
-            A equipe <span className="font-black text-zinc-900">{deleteTarget.name}</span> possui{' '}
-            <span className="font-black text-amber-600">{deleteTarget.memberCount} membro(s)</span> vinculado(s).
-            Remova todos os membros antes de excluí-la.
+      {blockedDelete ? (
+        <Modal isOpen onClose={() => setDeleteTarget(null)} title="Não é possível excluir" size="sm"
+          footer={<ModalFooter><Button size="sm" onClick={() => setDeleteTarget(null)}>Entendi</Button></ModalFooter>}>
+          <p className="text-[13px] leading-relaxed text-slate-600">
+            A equipe <strong className="text-slate-900">{deleteTarget!.name}</strong> tem {deleteTarget!.memberCount} {deleteTarget!.memberCount === 1 ? 'membro vinculado' : 'membros vinculados'}. Desvincule todos antes de excluir.
           </p>
         </Modal>
       ) : (
-        <ConfirmModal
-          isOpen={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          onConfirm={handleDeleteConfirm}
-          title="Excluir Equipe"
-          message={`Tem certeza que deseja excluir a equipe "${deleteTarget?.name}"? Esta ação não pode ser desfeita.`}
-          confirmLabel="Sim, Excluir"
-          variant="danger"
-        />
+        <ConfirmModal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleting}
+          title="Excluir equipe?" message={`A equipe "${deleteTarget?.name}" será excluída. Esta ação não pode ser desfeita.`} confirmLabel="Excluir equipe" variant="danger" />
       )}
     </PageWrapper>
   );

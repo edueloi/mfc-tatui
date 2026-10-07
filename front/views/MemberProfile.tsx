@@ -5,22 +5,7 @@ import { api, photoSrc } from '../api';
 import { Member, BaseTeam } from '../types';
 import { PageWrapper, ContentCard, PanelCard, Button, Badge, EmptyState, DetailField, Tabs } from '../components/ui';
 import { maskCPF, maskPhone, maskCEP } from '../utils/masks';
-
-function dateLabel(value?: string) {
-  if (!value) return '';
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
-}
-
-function yearsSince(value?: string) {
-  if (!value) return null;
-  const date = new Date(`${value.slice(0, 10)}T12:00:00`);
-  const today = new Date();
-  if (Number.isNaN(date.getTime()) || date > today) return null;
-  let years = today.getFullYear() - date.getFullYear();
-  if (today.getMonth() < date.getMonth() || (today.getMonth() === date.getMonth() && today.getDate() < date.getDate())) years--;
-  return years;
-}
+import { dateLabel, yearsSince } from '../utils/dates';
 
 const tabs = [
   { id: 'pessoal', label: 'Perfil', icon: User },
@@ -114,7 +99,7 @@ const MemberProfile: React.FC = () => {
         </div>
       </ContentCard>
 
-      <Tabs items={tabs} value={activeTab} onChange={setActiveTab} label="Detalhes do MFCista">
+      <Tabs<typeof tabs[number]['id']> items={tabs} value={activeTab} onChange={setActiveTab} label="Detalhes do MFCista">
         {activeTab === 'pessoal' && <div className="space-y-3">
           <PanelCard title="Dados pessoais">
             <dl className={fieldsClass}>

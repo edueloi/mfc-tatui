@@ -1,297 +1,252 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus, Users, Calendar, MapPin, Search, Trash2, Edit, Check, AlertCircle } from 'lucide-react';
-import { api } from '../api';
+import toast from 'react-hot-toast';
+import { ArrowLeft, UserPlus, Users, MapPin, Pencil, Trash2, Check, AlertCircle, Loader2, Layers, Baby, UserCheck, Cake } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { api, photoSrc } from '../api';
 import { MemberStatus, Member, BaseTeam } from '../types';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { 
-  PageWrapper, 
-  SectionTitle, 
-  ContentCard, 
-  Button, 
-  IconButton, 
-  Badge,
-  Modal,
-  EmptyState
+import {
+  PageWrapper, ContentCard, PanelCard, Button, Badge, Modal, ModalFooter, ConfirmModal, EmptyState, StatGrid, StatCard, Tabs,
+  FilterLine, FilterLineSection, FilterLineSearch, GridTable, usePagination,
 } from '../components/ui';
+import { TeamFormModal } from '../components/TeamFormModal';
+import { maskPhone } from '../utils/masks';
+import { dateLabel, yearsSince } from '../utils/dates';
+import { matchesDirectorySearch } from '../utils/memberDirectory';
+import { findTeamByParam, teamPath } from '../utils/teamSlug';
+
+const tabs = [
+  { id: 'membros', label: 'Membros', icon: Users },
+  { id: 'resumo', label: 'Resumo', icon: Cake },
+] as const;
+
+const shortMonths = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const ageBands = [
+  { name: 'Até 20 anos', test: (age: number) => age <= 20 },
+  { name: '21 a 40 anos', test: (age: number) => age > 20 && age <= 40 },
+  { name: '41 a 60 anos', test: (age: number) => age > 40 && age <= 60 },
+  { name: 'Mais de 60', test: (age: number) => age > 60 },
+];
+const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
+
+const Avatar: React.FC<{ member: Member }> = ({ member }) => (
+  <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-blue-50 text-xs font-semibold text-blue-700">
+    {member.photoUrl ? <img src={photoSrc(member.photoUrl)} alt={`Foto de ${member.name}`} className="h-full w-full object-cover" /> : (member.name || '?').substring(0, 2).toUpperCase()}
+  </div>
+);
 
 const TeamDetail: React.FC = () => {
-  const { teamId } = useParams<{ teamId: string }>();
+  const { teamSlug: teamParam } = useParams<{ teamSlug: string }>();
   const navigate = useNavigate();
-  const [team, setTeam] = useState<BaseTeam | null>(null);
+  const [teams, setTeams] = useState<BaseTeam[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [activeTab, setActiveTab] = useState<typeof tabs[number]['id']>('membros');
+  const [search, setSearch] = useState('');
   const [showAddMember, setShowAddMember] = useState(false);
-
-  const loadData = () => {
-    api.getTeams()
-      .then((items: BaseTeam[]) => {
-        const found = items.find(t => t.id === teamId) || null;
-        setTeam(found);
-      })
-      .catch(() => setTeam(null));
-
-    api.getMembers()
-      .then(setMembers)
-      .catch(() => setMembers([]));
-  };
+  const [attachingId, setAttachingId] = useState<string | null>(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    loadData();
-
-    const handleFocus = () => loadData();
-    window.addEventListener('focus', handleFocus);
-    
-    const interval = setInterval(loadData, 30000);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      clearInterval(interval);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [teamItems, memberItems] = await Promise.all([api.getTeams(), api.getMembers()]);
+        if (cancelled) return;
+        setTeams(teamItems);
+        setMembers(memberItems);
+        setError(false);
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
-  }, [teamId]);
+    setLoading(true);
+    setActiveTab('membros');
+    setSearch('');
+    load();
+    window.addEventListener('focus', load);
+    return () => { cancelled = true; window.removeEventListener('focus', load); };
+  }, [teamParam, retry]);
 
-  const teamMembers = members.filter(m => m.teamId === teamId);
-  const waitingMembers = members.filter(m => m.status === MemberStatus.AGUARDANDO && !m.teamId);
+  const team = useMemo(() => findTeamByParam(teams, teamParam), [teams, teamParam]);
 
-  const handleAttachMember = (member: Member) => {
-    if (!teamId) return;
-    api.updateMember(member.id, { ...member, teamId })
-      .then((updated: Member) => {
-        setMembers(prev => prev.map(m => (m.id === updated.id ? updated : m)));
-        setTimeout(() => loadData(), 500);
-      })
-      .catch((error) => {
-        console.error('Erro ao vincular membro:', error);
-      });
+  // Links antigos (/equipes/<id>) e renomeações passam a usar o nome na URL.
+  useEffect(() => {
+    if (!team) return;
+    const path = teamPath(team, teams);
+    if (path !== `/equipes/${teamParam}`) navigate(path, { replace: true });
+  }, [team, teams, teamParam, navigate]);
+
+  const teamMembers = useMemo(() => members.filter(member => team && member.teamId === team.id).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [members, team]);
+  const filteredMembers = useMemo(() => teamMembers.filter(member => matchesDirectorySearch(member, search)), [teamMembers, search]);
+  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(filteredMembers, 15);
+  const waitingMembers = useMemo(() => members.filter(member => member.status === MemberStatus.AGUARDANDO && !member.teamId), [members]);
+
+  const stats = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const birthdaysByMonth = shortMonths.map((month, index) => ({ month, total: teamMembers.filter(member => member.dob && Number(member.dob.slice(5, 7)) - 1 === index).length }));
+    const ages = ageBands.map(band => ({ name: band.name, value: teamMembers.filter(member => { const age = yearsSince(member.dob); return age !== null && band.test(age); }).length }));
+    return {
+      active: teamMembers.filter(member => member.status === MemberStatus.ATIVO).length,
+      birthdaysThisMonth: birthdaysByMonth[currentMonth].total,
+      birthdaysByMonth,
+      ages,
+      withoutBirthDate: teamMembers.filter(member => yearsSince(member.dob) === null).length,
+    };
+  }, [teamMembers]);
+
+  const handleAttach = async (member: Member) => {
+    if (!team || attachingId) return;
+    setAttachingId(member.id);
+    try {
+      const updated: Member = await api.updateMember(member.id, { ...member, teamId: team.id });
+      setMembers(prev => prev.map(item => item.id === updated.id ? updated : item));
+      toast.success(`${member.name} vinculado(a) à equipe.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível vincular o membro.');
+    } finally { setAttachingId(null); }
   };
 
-  const ageData = [
-    { name: '0-20', value: 2 },
-    { name: '21-40', value: 5 },
-    { name: '41-60', value: 3 },
-    { name: '60+', value: 2 },
-  ];
-
-  const birthdayData = [
-    { month: 'Jan', count: 1 },
-    { month: 'Fev', count: 0 },
-    { month: 'Mar', count: 2 },
-    { month: 'Abr', count: 1 },
-    { month: 'Mai', count: 0 },
-    { month: 'Jun', count: 3 },
-  ];
-
-  const COLORS = ['#f59e0b', '#fcd34d', '#fbbf24', '#d97706'];
-
-  if (!team) return (
-    <PageWrapper>
-      <EmptyState 
-        icon={Users} 
-        title="Equipe não encontrada" 
-        description="A equipe que você tentou acessar não existe ou foi removida." 
-        action={<Button variant="primary" size="sm" onClick={() => navigate('/equipes')}>Voltar para Equipes</Button>}
-      />
-    </PageWrapper>
-  );
-
-  const formatDate = (dateString: string) => {
+  const handleDelete = async () => {
+    if (!team || deleting) return;
+    setDeleting(true);
     try {
-      const date = new Date(dateString);
-      return new Intl.DateTimeFormat('pt-BR', { 
-        day: '2-digit', 
-        month: 'long', 
-        year: 'numeric' 
-      }).format(date);
-    } catch {
-      return dateString;
+      await api.deleteTeam(team.id);
+      toast.success('Equipe excluída.');
+      navigate('/equipes', { replace: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível excluir a equipe.');
+      setDeleting(false);
     }
   };
 
+  if (loading && !team) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando equipe…</div></PageWrapper>;
+
+  if (error || !team) return <PageWrapper><ContentCard><EmptyState icon={Users}
+    title={error ? 'Não foi possível carregar a equipe' : 'Equipe não encontrada'}
+    description={error ? 'Confira a conexão e tente novamente.' : 'A equipe pode ter sido removida ou o endereço está incorreto.'}
+    action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => navigate('/equipes')}>Voltar para Equipes</Button>{error && <Button onClick={() => setRetry(value => value + 1)}>Tentar novamente</Button>}</div>} />
+  </ContentCard></PageWrapper>;
+
+  const hasMembers = teamMembers.length > 0;
+  const founded = dateLabel(team.createdAt);
+
   return (
     <PageWrapper>
-      <div className="space-y-6">
-        {/* Header */}
-        <SectionTitle
-          title={team.name}
-          description={`Fundada em ${formatDate(team.createdAt)}`}
-          icon={Users}
-          action={
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                iconLeft={<ArrowLeft className="w-4 h-4" />}
-                onClick={() => navigate('/equipes')}
-              >
-                Voltar
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                iconLeft={<UserPlus className="w-4 h-4" />}
-                onClick={() => setShowAddMember(true)}
-              >
-                Vincular Membro
-              </Button>
-              <IconButton variant="outline" size="sm">
-                <Edit className="w-4 h-4" />
-              </IconButton>
-              <IconButton variant="outline" size="sm" className="hover:bg-red-50 border-red-100">
-                <Trash2 className="w-4 h-4 text-red-500" />
-              </IconButton>
-            </div>
-          }
-        />
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Member List */}
-          <div className="lg:col-span-2 space-y-6">
-            <ContentCard padding="none" className="overflow-hidden border-none shadow-xl shadow-slate-200/50 sm:rounded-[2rem]">
-              <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-white">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center border border-amber-100">
-                    <Users className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-zinc-800 tracking-tight">Membros Atuais</h3>
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{teamMembers.length} pessoas na equipe</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="divide-y divide-zinc-50 bg-white">
-                {teamMembers.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <p className="text-sm text-zinc-400 font-medium">Nenhum membro vinculado a esta equipe ainda.</p>
-                  </div>
-                ) : (
-                  teamMembers.map(member => (
-                    <div 
-                      key={member.id} 
-                      className="p-4 flex items-center justify-between hover:bg-zinc-50 cursor-pointer transition-colors group"
-                      onClick={() => navigate(`/mfcistas/${member.id}`)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-black text-sm uppercase shadow-sm group-hover:scale-105 transition-transform">
-                          {member.name.substring(0, 2)}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-zinc-800 group-hover:text-amber-600 transition-colors">{member.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs font-semibold text-zinc-500">{member.phone}</span>
-                            {member.status === MemberStatus.ATIVO && (
-                              <Badge color="success" size="sm">Ativo</Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right flex flex-col items-end">
-                         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1">Desde</span>
-                         <span className="text-xs font-semibold text-zinc-600 bg-zinc-100 px-2 py-1 rounded-md">{member.mfcDate || 'N/A'}</span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ContentCard>
-          </div>
-
-          {/* Statistics */}
-          <div className="lg:col-span-1 space-y-6">
-            <ContentCard padding="md" className="border-none shadow-xl shadow-slate-200/50 sm:rounded-[2rem]">
-              <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-4">Faixa Etária</h3>
-              <div className="h-48 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={ageData} dataKey="value" innerRadius={40} outerRadius={65} paddingAngle={5} stroke="none">
-                      {ageData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {ageData.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-xs font-bold text-zinc-600">{item.name}</span>
-                  </div>
-                ))}
-              </div>
-            </ContentCard>
-
-            <ContentCard padding="md" className="border-none shadow-xl shadow-slate-200/50 sm:rounded-[2rem]">
-              <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-4">Aniversariantes</h3>
-              <div className="h-40 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={birthdayData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#a1a1aa', fontWeight: 700 }} dy={10} />
-                    <Tooltip cursor={{ fill: '#f4f4f5', radius: 8 }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }} />
-                    <Bar dataKey="count" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </ContentCard>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate('/equipes')}>Voltar para Equipes</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" iconLeft={<UserPlus size={14} />} onClick={() => setShowAddMember(true)}>Vincular membro</Button>
+            <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={() => setShowEdit(true)}>Editar</Button>
+            <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={() => setShowDelete(true)}>Excluir</Button>
           </div>
         </div>
 
-        {/* Add Member Modal */}
-        <Modal
-          isOpen={showAddMember}
-          onClose={() => setShowAddMember(false)}
-          title="Vincular Membro"
-          size="lg"
-        >
-          <div className="p-4 space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-bold text-amber-800">Membros Aguardando</h4>
-                <p className="text-xs text-amber-600/80 mt-1 font-medium">
-                  Abaixo estão listados apenas os membros que estão com status "Aguardando" e ainda não possuem equipe vinculada.
-                </p>
+        <ContentCard padding="md">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border ${team.isYouth ? 'border-violet-100 bg-violet-50 text-violet-600' : 'border-blue-100 bg-blue-50 text-blue-600'}`}>
+              {team.isYouth ? <Baby size={24} /> : <Layers size={24} />}
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold text-slate-900 break-words">{team.name}</h1>
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500 break-words"><MapPin size={12} className="shrink-0" />{team.city} / {team.state}{founded && ` · Cadastrada em ${founded}`}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge color={team.isYouth ? 'purple' : 'info'} dot>{team.isYouth ? 'MFC Jovem' : 'Equipe base'}</Badge>
+                <span className="text-xs text-slate-500">{teamMembers.length} {teamMembers.length === 1 ? 'membro' : 'membros'}</span>
               </div>
             </div>
-
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-              {waitingMembers.length === 0 ? (
-                <EmptyState 
-                  icon={Check} 
-                  title="Tudo certo!" 
-                  description="Não há nenhum membro aguardando vinculação no momento." 
-                />
-              ) : (
-                waitingMembers.map(member => (
-                  <div key={member.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 border border-zinc-100 bg-white rounded-2xl hover:border-amber-200 hover:shadow-md transition-all gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-100 text-zinc-600 flex items-center justify-center text-sm font-black uppercase">
-                        {member.name.substring(0, 2)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-zinc-900 truncate">{member.name}</p>
-                        <p className="text-xs font-semibold text-zinc-500 truncate">{member.phone}</p>
-                      </div>
-                    </div>
-                    <Button 
-                      variant="primary" 
-                      size="xs" 
-                      onClick={() => handleAttachMember(member)}
-                      className="w-full sm:w-auto"
-                    >
-                      Vincular à Equipe
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
-        </Modal>
+        </ContentCard>
+
+        <StatGrid cols={3}>
+          <StatCard title="Membros" value={teamMembers.length} icon={Users} color="info" />
+          <StatCard title="Ativos" value={stats.active} icon={UserCheck} color="success" />
+          <StatCard title="Aniversários no mês" value={stats.birthdaysThisMonth} icon={Cake} color="purple" />
+        </StatGrid>
+
+        <Tabs<typeof tabs[number]['id']> items={tabs} value={activeTab} onChange={setActiveTab} label="Detalhes da equipe">
+          {activeTab === 'membros' && <div className="space-y-3">
+            <FilterLine>
+              <FilterLineSection grow><FilterLineSearch aria-label="Buscar membros da equipe" value={search} onChange={setSearch} placeholder="Nome, apelido, telefone ou CPF…" /></FilterLineSection>
+              <FilterLineSection><span className="text-xs text-slate-500">{filteredMembers.length} {filteredMembers.length === 1 ? 'membro' : 'membros'}</span>{search && <Button variant="ghost" size="sm" onClick={() => setSearch('')}>Limpar busca</Button>}</FilterLineSection>
+            </FilterLine>
+            <ContentCard padding="none">
+              <GridTable<Member> data={paginatedData} keyExtractor={member => member.id} noDesktopCard onRowClick={member => navigate(`/mfcistas/${member.id}`)}
+                columns={[
+                  { header: 'MFCista', render: member => <div className="flex min-w-0 items-center gap-2.5"><Avatar member={member} /><div className="min-w-0"><p className="text-xs font-medium text-slate-800 break-words">{member.name}</p>{member.nickname && <p className="mt-0.5 text-[11px] text-slate-500">{member.nickname}</p>}</div></div> },
+                  { header: 'Telefone', render: member => <span className="text-xs whitespace-nowrap text-slate-700">{maskPhone(member.phone || '') || 'Não informado'}</span> },
+                  { header: 'Status', render: member => <Badge size="sm" dot color={member.status === MemberStatus.ATIVO ? 'success' : member.status === MemberStatus.AGUARDANDO || member.status === MemberStatus.PENDENTE ? 'warning' : 'default'}>{member.status || 'Não informado'}</Badge> },
+                  { header: 'No MFC desde', render: member => <span className="text-xs whitespace-nowrap text-slate-700">{dateLabel(member.mfcDate) || 'Não informado'}</span> },
+                ]}
+                emptyMessage={<EmptyState icon={Users} title={hasMembers ? 'Nenhum membro encontrado' : 'Nenhum membro nesta equipe'}
+                  description={hasMembers ? 'Ajuste a busca para encontrar o membro.' : 'Vincule MFCistas que estão aguardando uma equipe.'}
+                  action={!hasMembers ? <Button size="sm" iconLeft={<UserPlus size={14} />} onClick={() => setShowAddMember(true)}>Vincular membro</Button> : undefined} />}
+                pagination={{ total: filteredMembers.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+            </ContentCard>
+          </div>}
+
+          {activeTab === 'resumo' && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <PanelCard title="Faixa etária" description={stats.withoutBirthDate ? `${stats.withoutBirthDate} sem data de nascimento não entram no gráfico.` : 'Distribuição por idade dos membros.'}>
+              {stats.ages.some(band => band.value > 0) ? <div className="h-64 min-w-0">
+                <ResponsiveContainer width="100%" height="100%"><PieChart>
+                  <Pie data={stats.ages.filter(band => band.value > 0)} innerRadius={55} outerRadius={75} paddingAngle={3} dataKey="value" nameKey="name">
+                    {stats.ages.filter(band => band.value > 0).map(band => <Cell key={band.name} fill={COLORS[stats.ages.indexOf(band) % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip /><Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart></ResponsiveContainer>
+              </div> : <EmptyState icon={Users} title="Sem dados de idade" description="Cadastre a data de nascimento dos membros para ver o gráfico." />}
+            </PanelCard>
+            <PanelCard title="Aniversariantes por mês" description="Quantidade de membros que fazem aniversário em cada mês.">
+              <div className="h-64 min-w-0">
+                <ResponsiveContainer width="100%" height="100%"><BarChart data={stats.birthdaysByMonth}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value: number) => [value, 'Aniversariantes']} />
+                  <Bar dataKey="total" fill="#2563eb" radius={[3, 3, 0, 0]} barSize={20} />
+                </BarChart></ResponsiveContainer>
+              </div>
+            </PanelCard>
+          </div>}
+        </Tabs>
       </div>
+
+      <Modal isOpen={showAddMember} onClose={() => setShowAddMember(false)} title="Vincular membro" size="lg"
+        footer={<ModalFooter><Button variant="ghost" size="sm" onClick={() => setShowAddMember(false)}>Fechar</Button></ModalFooter>}>
+        <div className="space-y-3">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500"><AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-500" />Aparecem apenas MFCistas com status “Aguardando” que ainda não têm equipe.</p>
+          {waitingMembers.length === 0
+            ? <EmptyState icon={Check} title="Tudo certo" description="Nenhum MFCista aguardando vinculação no momento." />
+            : <div className="max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
+              {waitingMembers.map(member => <div key={member.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <div className="flex min-w-0 items-center gap-2.5"><Avatar member={member} /><div className="min-w-0"><p className="text-[13px] text-slate-800 break-words">{member.name}</p><p className="text-xs text-slate-500">{maskPhone(member.phone || '') || 'Telefone não informado'}</p></div></div>
+                <Button size="xs" loading={attachingId === member.id} disabled={!!attachingId} onClick={() => handleAttach(member)}>Vincular</Button>
+              </div>)}
+            </div>}
+        </div>
+      </Modal>
+
+      <TeamFormModal isOpen={showEdit} team={team} onClose={() => setShowEdit(false)}
+        onSaved={saved => { setTeams(prev => prev.map(item => item.id === saved.id ? { ...item, ...saved } : item)); }} />
+
+      {teamMembers.length > 0 ? (
+        <Modal isOpen={showDelete} onClose={() => setShowDelete(false)} title="Não é possível excluir" size="sm"
+          footer={<ModalFooter><Button size="sm" onClick={() => setShowDelete(false)}>Entendi</Button></ModalFooter>}>
+          <p className="text-[13px] leading-relaxed text-slate-600">A equipe <strong className="text-slate-900">{team.name}</strong> tem {teamMembers.length} {teamMembers.length === 1 ? 'membro vinculado' : 'membros vinculados'}. Desvincule todos antes de excluir.</p>
+        </Modal>
+      ) : (
+        <ConfirmModal isOpen={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDelete} loading={deleting}
+          title="Excluir equipe?" message={`A equipe "${team.name}" será excluída. Esta ação não pode ser desfeita.`} confirmLabel="Excluir equipe" variant="danger" />
+      )}
     </PageWrapper>
   );
 };
 
 export default TeamDetail;
-
-
-
-
