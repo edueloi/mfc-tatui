@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { PhoneCall, Plus, Phone, UserPlus, Clock, XCircle, Heart, MessageCircle, Trash2, ArrowRight, Loader2 } from 'lucide-react';
+import { PhoneCall, Plus, Phone, UserPlus, Clock, XCircle, Heart, MessageCircle, Trash2, ArrowRight, Loader2, UsersRound, History } from 'lucide-react';
 import { api } from '../api';
-import { NucleationContact } from '../types';
+import { NucleationContact, NucleationGroup } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
-  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, usePagination,
+  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, Modal, ModalFooter, Input, DatePicker, PanelCard, usePagination,
 } from '../components/ui';
 import type { Column } from '../components/ui';
 import { NucleationContactModal } from '../components/NucleationContactModal';
@@ -25,6 +25,9 @@ const Nucleacao: React.FC = () => {
   const canDelete = usePermission('nucleacao', 'delete');
 
   const [contacts, setContacts] = useState<NucleationContact[]>([]);
+  const [groups, setGroups] = useState<NucleationGroup[]>([]);
+  const [groupView, setGroupView] = useState('geral');
+  const [groupDetail, setGroupDetail] = useState<NucleationGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -33,11 +36,20 @@ const Nucleacao: React.FC = () => {
   const [showNewModal, setShowNewModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<NucleationContact | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
+  const [savingGroup, setSavingGroup] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyNotes, setHistoryNotes] = useState('');
+  const [historyDate, setHistoryDate] = useState('');
+  const [savingHistory, setSavingHistory] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    const load = () => api.getNucleationContacts()
-      .then((items: NucleationContact[]) => { if (!cancelled) { setContacts(items); setError(false); } })
+    // O histórico de contatos continua disponível enquanto o backend é atualizado com as rotas de grupos.
+    const load = () => Promise.all([api.getNucleationContacts(), api.getNucleationGroups().catch(() => [])])
+      .then(([items, groupItems]: [NucleationContact[], NucleationGroup[]]) => { if (!cancelled) { setContacts(items); setGroups(groupItems); setError(false); } })
       .catch(() => { if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     load();
@@ -45,12 +57,18 @@ const Nucleacao: React.FC = () => {
     return () => { cancelled = true; window.removeEventListener('focus', load); };
   }, [retry]);
 
+  useEffect(() => {
+    if (groupView === 'geral') { setGroupDetail(null); return; }
+    api.getNucleationGroup(groupView).then(setGroupDetail).catch(() => setGroupDetail(null));
+  }, [groupView]);
+
   const query = normalizeDirectoryText(search);
   const digits = search.replace(/\D/g, '');
-  const filtered = useMemo(() => contacts.filter(contact =>
+  const scopedContacts = groupView === 'geral' ? contacts : groupDetail?.contacts || contacts.filter(contact => contact.groupId === groupView);
+  const filtered = useMemo(() => scopedContacts.filter(contact =>
     (!query || normalizeDirectoryText(contact.name).includes(query) || (digits.length >= 3 && [contact.phone1, contact.phone2].some(phone => (phone || '').replace(/\D/g, '').includes(digits))))
     && (statusFilter === 'Todos' || contact.status === statusFilter)
-  ), [contacts, query, digits, statusFilter]);
+  ), [scopedContacts, query, digits, statusFilter]);
   const { page, setPage, pageSize, setPageSize, paginatedData } = usePagination(filtered, 15);
 
   const stats = useMemo(() => ({
@@ -76,6 +94,30 @@ const Nucleacao: React.FC = () => {
 
   const open = (contact: NucleationContact) => navigate(contactPath(contact, contacts));
 
+  const createGroup = async () => {
+    if (groupName.trim().length < 3 || savingGroup) return;
+    setSavingGroup(true);
+    try {
+      const created: NucleationGroup = await api.createNucleationGroup({ name: groupName.trim(), description: groupDescription.trim() });
+      setGroups(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+      setGroupName(''); setGroupDescription(''); setShowGroupModal(false); setGroupView(created.id);
+      toast.success('Grupo criado.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível criar o grupo.'); }
+    finally { setSavingGroup(false); }
+  };
+
+  const createHistory = async () => {
+    if (groupView === 'geral' || !historyNotes.trim() || savingHistory) return;
+    setSavingHistory(true);
+    try {
+      const item = await api.createNucleationGroupHistory(groupView, { notes: historyNotes.trim(), occurredAt: historyDate });
+      setGroupDetail(prev => prev ? { ...prev, history: [item, ...(prev.history || [])] } : prev);
+      setHistoryNotes(''); setHistoryDate(''); setShowHistoryModal(false);
+      toast.success('Histórico do grupo registrado.');
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível registrar o histórico.'); }
+    finally { setSavingHistory(false); }
+  };
+
   const columns: Column<NucleationContact>[] = [
     { header: 'Contato', render: contact => <div className="min-w-0">
       <p className="text-xs font-medium text-slate-800 break-words">{contact.name}</p>
@@ -94,6 +136,7 @@ const Nucleacao: React.FC = () => {
       })}</ul> : <span className="text-xs text-slate-400">Não informado</span>;
     } },
     { header: 'Status', render: contact => <Badge size="sm" dot color={STATUS_COLOR[contact.status] || 'default'}>{contact.status}</Badge> },
+    ...(groupView === 'geral' ? [{ header: 'Grupo', render: (contact: NucleationContact) => contact.groupName ? <Badge size="sm" color="info">{contact.groupName}</Badge> : <span className="text-xs text-slate-400">Sem grupo</span> } as Column<NucleationContact>] : []),
     { header: 'Ações', render: contact => <div className="flex items-center gap-1.5 sm:justify-end">
       <Button variant="outline" size="xs" iconRight={<ArrowRight size={12} />} onClick={event => { event.stopPropagation(); open(contact); }}>Abrir</Button>
       {canDelete && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${contact.name}`} onClick={event => { event.stopPropagation(); setDeleteTarget(contact); }}><Trash2 size={14} className="text-red-500" /></IconButton>}
@@ -108,8 +151,8 @@ const Nucleacao: React.FC = () => {
   return (
     <PageWrapper>
       <div className="space-y-4">
-        <SectionTitle title="Nucleação" icon={PhoneCall} description="Acompanhamento de contatos e conversão em MFCista."
-          action={canCreate ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button> : undefined} />
+        <SectionTitle title="Nucleação" icon={PhoneCall} description="Acompanhamento de contatos, grupos e conversão em MFCista."
+          action={canCreate ? <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<UsersRound size={14} />} onClick={() => setShowGroupModal(true)}>Novo grupo</Button><Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button></div> : undefined} />
 
         <StatGrid cols={4}>
           <StatCard title="Total de contatos" value={stats.total} icon={PhoneCall} color="info" />
@@ -120,6 +163,7 @@ const Nucleacao: React.FC = () => {
 
         <FilterLine>
           <FilterLineSection grow>
+            <FilterLineItem><FilterLineSegmented<string> value={groupView} onChange={setGroupView} options={[{ value: 'geral', label: `Geral (${contacts.length})` }, ...groups.map(group => ({ value: group.id, label: `${group.name} (${group.contactsCount})` }))]} /></FilterLineItem>
             <FilterLineItem grow><FilterLineSearch aria-label="Buscar contato" value={search} onChange={setSearch} placeholder="Nome ou telefone…" /></FilterLineItem>
             <FilterLineItem><FilterLineSegmented<string> value={statusFilter} onChange={setStatusFilter}
               options={[{ value: 'Todos', label: 'Todos' }, { value: 'Pendente', label: 'Pendentes' }, { value: 'Em Andamento', label: 'Em andamento' }, { value: 'Convertido', label: 'Convertidos' }]} /></FilterLineItem>
@@ -130,6 +174,13 @@ const Nucleacao: React.FC = () => {
           </FilterLineSection>
         </FilterLine>
 
+        {groupView !== 'geral' && groupDetail && <PanelCard title={groupDetail.name} icon={UsersRound} description={groupDetail.description || 'Grupo de acompanhamento da Nucleação.'}
+          action={canCreate ? <Button variant="outline" size="xs" iconLeft={<History size={12} />} onClick={() => setShowHistoryModal(true)}>Registrar histórico</Button> : undefined}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><div><p className="mb-2 text-xs font-semibold text-slate-700">Integrantes do grupo</p><p className="text-sm text-slate-600">{groupDetail.contacts?.length || 0} {(groupDetail.contacts?.length || 0) === 1 ? 'contato vinculado' : 'contatos vinculados'}.</p></div>
+            <div><p className="mb-2 text-xs font-semibold text-slate-700">Histórico do grupo</p>{groupDetail.history?.length ? <ul className="space-y-1.5">{groupDetail.history.slice(0, 3).map(item => <li key={item.id} className="text-xs text-slate-600"><span className="font-medium text-slate-800">{item.occurredAt || item.createdAt}</span> · {item.notes}</li>)}</ul> : <p className="text-xs text-slate-500">Nenhum histórico registrado.</p>}</div>
+          </div>
+        </PanelCard>}
+
         <ContentCard padding="none">
           <GridTable columns={columns} data={paginatedData} keyExtractor={contact => contact.id} onRowClick={open} noDesktopCard
             emptyMessage={<EmptyState icon={PhoneCall} title="Nenhum contato encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Casais confirmados no Encontro de Noivos podem ser enviados para cá.'}
@@ -139,6 +190,14 @@ const Nucleacao: React.FC = () => {
       </div>
 
       <NucleationContactModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} onCreated={created => setContacts(prev => [created, ...prev])} />
+
+      <Modal isOpen={showGroupModal} onClose={() => !savingGroup && setShowGroupModal(false)} title="Novo grupo de nucleação" size="sm" footer={<ModalFooter><Button variant="ghost" size="sm" disabled={savingGroup} onClick={() => setShowGroupModal(false)}>Cancelar</Button><Button size="sm" loading={savingGroup} onClick={createGroup}>Criar grupo</Button></ModalFooter>}>
+        <div className="space-y-3"><Input label="Nome do grupo" value={groupName} onChange={event => setGroupName(event.target.value)} placeholder="Ex.: Grupo São José" /><Input label="Descrição (opcional)" value={groupDescription} onChange={event => setGroupDescription(event.target.value)} placeholder="Objetivo ou responsáveis" /></div>
+      </Modal>
+
+      <Modal isOpen={showHistoryModal} onClose={() => !savingHistory && setShowHistoryModal(false)} title="Registrar histórico do grupo" size="sm" footer={<ModalFooter><Button variant="ghost" size="sm" disabled={savingHistory} onClick={() => setShowHistoryModal(false)}>Cancelar</Button><Button size="sm" loading={savingHistory} onClick={createHistory}>Registrar</Button></ModalFooter>}>
+        <div className="space-y-3"><DatePicker label="Data" value={historyDate} onChange={value => setHistoryDate(value || '')} /><Input label="Histórico" value={historyNotes} onChange={event => setHistoryNotes(event.target.value)} placeholder="Ex.: Primeiro encontro do grupo..." /></div>
+      </Modal>
 
       <ConfirmModal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleting}
         title="Excluir contato?" message={`O contato de ${deleteTarget?.name} e o histórico de tentativas serão excluídos. Esta ação não pode ser desfeita.`} confirmLabel="Excluir contato" variant="danger" />

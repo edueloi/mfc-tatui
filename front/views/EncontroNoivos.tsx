@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Heart, Plus, CheckCircle2, Clock, Link as LinkIcon, Copy, PhoneCall, Calendar, ArrowLeft, ArrowRight, MapPin, Wallet, Users, LayoutGrid, Pencil, Trash2, Loader2, Lock, LockOpen, Link2 } from 'lucide-react';
+import { Heart, Plus, CheckCircle2, Clock, Link as LinkIcon, Copy, PhoneCall, Calendar, ArrowLeft, ArrowRight, MapPin, Wallet, Users, LayoutGrid, Pencil, Trash2, Loader2, Lock, LockOpen, Send } from 'lucide-react';
 import { api } from '../api';
-import { BridalCouple, BridalMeeting } from '../types';
+import { BridalCouple, BridalMeeting, Event } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
   FilterLineSegmented, GridTable, EmptyState, Badge, Modal, ConfirmModal, Tabs, usePagination,
@@ -11,6 +11,7 @@ import {
 import type { Column } from '../components/ui';
 import { BridalCoupleForm, BridalCoupleFormData } from '../components/BridalCoupleForm';
 import { BridalMeetingModal } from '../components/BridalMeetingModal';
+import { BridalMeetingInviteModal } from '../components/BridalMeetingInviteModal';
 import { usePermission } from '../src/hooks/usePermission';
 import { dateLabel } from '../utils/dates';
 import { meetingStatus, CLOSE_AFTER_DAYS } from '../utils/meetingStatus';
@@ -54,6 +55,8 @@ const EncontroNoivos: React.FC = () => {
   const [closeTarget, setCloseTarget] = useState<BridalMeeting | null>(null);
   const [closing, setClosing] = useState(false);
   const [openingEvent, setOpeningEvent] = useState<string | null>(null);
+  const [inviteMeeting, setInviteMeeting] = useState<BridalMeeting | null>(null);
+  const [inviteEvent, setInviteEvent] = useState<Event | null>(null);
 
   const viewMode: 'encontros' | 'todos' = pathname.replace(/\/+$/, '') === `${BRIDAL_BASE}/casais` ? 'todos' : 'encontros';
   const orphanView = meetingSlug === SEM_ENCONTRO;
@@ -179,16 +182,16 @@ const EncontroNoivos: React.FC = () => {
     } finally { setClosing(false); }
   };
 
-  /** Copia o link público em que o casal preenche a ficha de inscrição completa deste encontro. */
-  const copyCoupleLink = async (meeting: BridalMeeting) => {
+  /** Abre o convite público em que o casal preenche a ficha completa deste encontro. */
+  const openCoupleInvite = async (meeting: BridalMeeting) => {
     if (openingEvent) return;
     setOpeningEvent(meeting.id);
     try {
-      const event = await api.getEventByMeeting(meeting.id);
-      await navigator.clipboard.writeText(`${window.location.origin}/eventos/inscricao/${event.publicToken}`);
-      toast.success('Link de inscrição copiado. Envie para os casais.');
+      const event: Event = await api.getEventByMeeting(meeting.id);
+      setInviteEvent(event);
+      setInviteMeeting(meeting);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Não foi possível copiar o link.');
+      toast.error(err instanceof Error ? err.message : 'Não foi possível abrir o convite.');
     } finally { setOpeningEvent(null); }
   };
 
@@ -264,7 +267,7 @@ const EncontroNoivos: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
               <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={() => navigate(meetingPath(meeting, meetings))}>Abrir encontro</Button>
-              <IconButton variant="ghost" size="xs" aria-label={`Copiar link de inscrição de ${meeting.name}`} title="Copiar link de inscrição dos casais" className="h-8 w-8" disabled={!!openingEvent} onClick={() => copyCoupleLink(meeting)}><Link2 size={14} /></IconButton>
+              {!status.closed && <Button variant="outline" size="xs" iconLeft={<Send size={12} />} disabled={!!openingEvent} onClick={() => openCoupleInvite(meeting)}>Convidar</Button>}
               <IconButton variant="ghost" size="xs" aria-label={`Evento e finanças de ${meeting.name}`} title="Evento, gastos e entradas" className="h-8 w-8" disabled={!!openingEvent} onClick={() => openMeetingEvent(meeting)}><Wallet size={14} /></IconButton>
               {canCreate && (status.closed
                 ? status.reason === 'manual' && <IconButton variant="ghost" size="xs" aria-label={`Reabrir ${meeting.name}`} title="Reabrir encontro" className="h-8 w-8" onClick={() => setMeetingActive(meeting, true)}><LockOpen size={14} /></IconButton>
@@ -321,7 +324,7 @@ const EncontroNoivos: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate(BRIDAL_BASE)}>Voltar para Encontros</Button>
             {selectedMeeting && canCreate && <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" iconLeft={<Link2 size={14} />} disabled={!!openingEvent} onClick={() => copyCoupleLink(selectedMeeting)}>Copiar link de inscrição</Button>
+              {!meetingStatus(selectedMeeting).closed && <Button variant="outline" size="sm" iconLeft={<Send size={14} />} loading={openingEvent === selectedMeeting.id} onClick={() => openCoupleInvite(selectedMeeting)}>Convidar casal</Button>}
               <Button variant="outline" size="sm" iconLeft={<Wallet size={14} />} loading={openingEvent === selectedMeeting.id} onClick={() => openMeetingEvent(selectedMeeting)}>Evento e finanças</Button>
               {!meetingStatus(selectedMeeting).closed && <Button variant="outline" size="sm" iconLeft={<Lock size={14} />} onClick={() => setCloseTarget(selectedMeeting)}>Encerrar encontro</Button>}
               {meetingStatus(selectedMeeting).reason === 'manual' && <Button variant="outline" size="sm" iconLeft={<LockOpen size={14} />} loading={closing} onClick={() => setMeetingActive(selectedMeeting, true)}>Reabrir encontro</Button>}
@@ -348,6 +351,7 @@ const EncontroNoivos: React.FC = () => {
       </Modal>
 
       <BridalMeetingModal isOpen={showMeetingModal} meeting={editingMeeting} onClose={() => setShowMeetingModal(false)} onSaved={handleMeetingSaved} />
+      <BridalMeetingInviteModal isOpen={!!inviteMeeting} meeting={inviteMeeting} event={inviteEvent} onClose={() => { setInviteMeeting(null); setInviteEvent(null); }} />
 
       <ConfirmModal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDeleteCouple} loading={deleting}
         title="Excluir ficha?" message={`A ficha de ${deleteTarget ? coupleName(deleteTarget) : ''} será excluída com os documentos anexados. Esta ação não pode ser desfeita.`} confirmLabel="Excluir ficha" variant="danger" />

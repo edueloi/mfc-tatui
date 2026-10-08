@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
 import Dashboard from './views/Dashboard';
@@ -27,23 +27,41 @@ import Nucleacao from './views/Nucleacao';
 import NucleationDetail from './views/NucleationDetail';
 import { User as UserType } from './types';
 
-const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<UserType | null>(null);
+// Lido já na primeira renderização: se esperasse um efeito, quem está logado seria mandado para o login ao atualizar a página.
+const readStoredUser = (): UserType | null => {
+  try {
+    const stored = localStorage.getItem('mfc.currentUser');
+    return stored ? JSON.parse(stored) as UserType : null;
+  } catch {
+    localStorage.removeItem('mfc.currentUser');
+    return null;
+  }
+};
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem('mfc.currentUser');
-    if (storedUser) {
-      try {
-        setCurrentUser(JSON.parse(storedUser) as UserType);
-      } catch {
-        localStorage.removeItem('mfc.currentUser');
-      }
-    }
-  }, []);
+/** Sem login: a página inicial é o site público (/site/); qualquer outro endereço vai para o login e volta depois. */
+const EntryRedirect: React.FC = () => {
+  const location = useLocation();
+  useEffect(() => { if (location.pathname === '/') window.location.replace('/site/'); }, [location.pathname]);
+  if (location.pathname === '/') return null;
+  return <Navigate to={`/entrar?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+};
+
+const LoginRoute: React.FC<{ onLogin: (user: UserType) => void }> = ({ onLogin }) => {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const next = params.get('next');
+  // Só volta para caminhos do próprio sistema.
+  const destination = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  return <Login onLogin={user => { onLogin(user); navigate(destination, { replace: true }); }} />;
+};
+
+const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<UserType | null>(readStoredUser);
 
   const handleLogout = () => {
     localStorage.removeItem('mfc.currentUser');
     setCurrentUser(null);
+    window.location.replace('/site/');
   };
 
   return (
@@ -78,17 +96,20 @@ const App: React.FC = () => {
           <Route path="/eventos/inscricao/:token" element={<EventPublicForm />} />
 
           {!currentUser ? (
-            <Route
-              path="*"
-              element={
-                <Login
-                  onLogin={(user) => {
-                    localStorage.setItem('mfc.currentUser', JSON.stringify(user));
-                    setCurrentUser(user);
-                  }}
-                />
-              }
-            />
+            <>
+              <Route
+                path="/entrar"
+                element={
+                  <LoginRoute
+                    onLogin={(user) => {
+                      localStorage.setItem('mfc.currentUser', JSON.stringify(user));
+                      setCurrentUser(user);
+                    }}
+                  />
+                }
+              />
+              <Route path="*" element={<EntryRedirect />} />
+            </>
           ) : (
             <Route path="/" element={<Layout currentUser={currentUser} onLogout={handleLogout} />}>
               <Route index element={<Dashboard />} />
@@ -118,6 +139,7 @@ const App: React.FC = () => {
               <Route path="usuarios" element={<UserManagement />} />
               <Route path="configuracoes" element={<Navigate to="/configuracoes/acessos" replace />} />
               <Route path="configuracoes/:tab" element={<SettingsView />} />
+              <Route path="entrar" element={<Navigate to="/" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           )}

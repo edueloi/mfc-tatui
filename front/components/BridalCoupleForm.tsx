@@ -8,10 +8,9 @@ import {
   ChevronRight,
   ChevronLeft,
   Heart,
-  Calendar,
 } from 'lucide-react';
 import { BridalPartner, BridalCoupleStatus, BridalPaymentStatus, BridalMeeting } from '../types';
-import { Button, Input, Select, DatePicker, Combobox, FileUpload, CepInput, Tabs } from './ui';
+import { Button, Input, DatePicker, Combobox, FileUpload, CepInput, Tabs } from './ui';
 import type { CepAddress } from './ui';
 import type { UploadedFileItem } from './ui';
 import { maskPhone, maskCEP, unmask } from '../utils/masks';
@@ -86,8 +85,8 @@ const PartnerBlock = ({
   partner: BridalPartner;
   onChange: (field: keyof BridalPartner, value: any) => void;
 }) => (
-  <div className="flex-1 space-y-4">
-    <div className="flex items-center gap-2 text-blue-600">
+  <div className={`flex-1 space-y-4 rounded-xl border p-4 ${role === 'noivo' ? 'border-sky-100 bg-sky-50/55' : 'border-rose-100 bg-rose-50/55'}`}>
+    <div className={`flex items-center gap-2 ${role === 'noivo' ? 'text-sky-700' : 'text-rose-700'}`}>
       <Heart className="w-4 h-4" />
       <h4 className="text-xs font-bold uppercase tracking-normal">{role === 'noivo' ? 'Noivo' : 'Noiva'}</h4>
     </div>
@@ -116,13 +115,16 @@ const PartnerBlock = ({
       onChange={(e) => onChange('profession', e.target.value)}
       placeholder="Profissão"
     />
-    <Select
-      label="Escolaridade"
-      value={partner.education}
-      onChange={(e) => onChange('education', e.target.value)}
-      options={EDUCATION_LEVELS}
-      placeholder="Selecione"
-    />
+    <div className="flex flex-col gap-1.5">
+      <label className="ds-label">Escolaridade</label>
+      <Combobox
+        value={partner.education}
+        onChange={(v) => onChange('education', v as string)}
+        options={EDUCATION_LEVELS}
+        placeholder="Selecione ou busque"
+        searchPlaceholder="Buscar escolaridade..."
+      />
+    </div>
     <div className="flex flex-col gap-1.5">
       <label className="ds-label">Religião</label>
       <Combobox
@@ -161,8 +163,8 @@ const AddressBlock = ({
   onChange: (field: keyof BridalPartner, value: any) => void;
   onAddress: (address: CepAddress) => void;
 }) => (
-  <div className="flex-1 space-y-4">
-    <div className="flex items-center gap-2 text-blue-600">
+  <div className={`flex-1 space-y-4 rounded-xl border p-4 ${role === 'noivo' ? 'border-sky-100 bg-sky-50/55' : 'border-rose-100 bg-rose-50/55'}`}>
+    <div className={`flex items-center gap-2 ${role === 'noivo' ? 'text-sky-700' : 'text-rose-700'}`}>
       <MapPin className="w-4 h-4" />
       <h4 className="text-xs font-bold uppercase tracking-normal">{role === 'noivo' ? 'Noivo' : 'Noiva'}</h4>
     </div>
@@ -171,24 +173,27 @@ const AddressBlock = ({
       onChange={value => onChange('zip', value)}
       onAddress={onAddress}
     />
-    <div className="grid grid-cols-3 gap-3">
+    <div>
       <Input
         label="Rua"
         value={partner.street}
         onChange={(e) => onChange('street', e.target.value)}
-        wrapperClassName="col-span-2"
       />
+    </div>
+    <div className="grid grid-cols-10 gap-3">
       <Input
         label="Número"
         value={partner.number}
         onChange={(e) => onChange('number', e.target.value)}
+        wrapperClassName="col-span-3"
+      />
+      <Input
+        label="Bairro"
+        value={partner.neighborhood}
+        onChange={(e) => onChange('neighborhood', e.target.value)}
+        wrapperClassName="col-span-7"
       />
     </div>
-    <Input
-      label="Bairro"
-      value={partner.neighborhood}
-      onChange={(e) => onChange('neighborhood', e.target.value)}
-    />
     <Input label="Complemento" value={partner.complement || ''} onChange={e => onChange('complement', e.target.value)} />
     <div className="grid grid-cols-2 gap-3">
       <Input
@@ -196,13 +201,16 @@ const AddressBlock = ({
         value={partner.city}
         onChange={(e) => onChange('city', e.target.value)}
       />
-      <Select
-        label="Estado"
-        value={partner.state}
-        onChange={(e) => onChange('state', e.target.value)}
-        options={PARTNER_ESTADOS}
-        placeholder="UF"
-      />
+      <div className="flex flex-col gap-1.5">
+        <label className="ds-label">Estado</label>
+        <Combobox
+          value={partner.state}
+          onChange={(v) => onChange('state', v as string)}
+          options={PARTNER_ESTADOS}
+          placeholder="UF"
+          searchPlaceholder="Buscar estado..."
+        />
+      </div>
     </div>
   </div>
 );
@@ -261,7 +269,7 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
   const goBack = () => setStepIndex(i => Math.max(i - 1, 0));
 
   const validate = () => {
-    const emailOk = (value: string) => !value || /^[^s@]+@[^s@]+.[^s@]+$/.test(value.trim());
+    const emailOk = (value: string) => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
     if (mode === 'public' ? !noivo.name.trim() || !noiva.name.trim() : !noivo.name.trim() && !noiva.name.trim()) return mode === 'public' ? 'Informe o nome completo do noivo e da noiva.' : 'Informe o nome de ao menos um dos noivos.';
     if (!emailOk(noivo.email) || !emailOk(noiva.email)) return 'Confira o e-mail informado.';
     return '';
@@ -338,33 +346,35 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
           <div className="space-y-5">
             {mode === 'internal' && (
               <div className="max-w-xl">
-                <Select
-                  label="Encontro"
+                <div className="flex flex-col gap-1.5">
+                  <label className="ds-label">Encontro</label>
+                  <Combobox
                   value={eventId || ''}
-                  onChange={(e) => setEventId(e.target.value || null)}
+                  onChange={(v) => setEventId(String(v) || null)}
                   options={meetings.filter(m => !isMeetingClosed(m) || m.id === eventId).map(m => ({ value: m.id, label: `${m.name} — ${dateLabel(m.date) || m.date}` }))}
                   placeholder="Selecione o encontro"
-                  iconLeft={<Calendar className="w-4 h-4" />}
+                  searchPlaceholder="Buscar encontro..."
                 />
+                </div>
               </div>
             )}
-            <div className="flex flex-col sm:flex-row gap-6">
+            <div className="flex flex-col gap-6 lg:flex-row">
               <PartnerBlock role="noivo" partner={noivo} onChange={(field, value) => setPartner('noivo', field, value)} />
-              <div className="hidden sm:block w-px bg-zinc-100" />
+              <div className="hidden w-px bg-zinc-100 lg:block" />
               <PartnerBlock role="noiva" partner={noiva} onChange={(field, value) => setPartner('noiva', field, value)} />
             </div>
           </div>
         )}
 
         {currentStep === 'endereco' && (
-          <div className="flex flex-col sm:flex-row gap-6">
+          <div className="flex flex-col gap-6 lg:flex-row">
             <AddressBlock
               role="noivo"
               partner={noivo}
               onChange={(field, value) => setPartner('noivo', field, value)}
               onAddress={(address) => applyAddress('noivo', address)}
             />
-            <div className="hidden sm:block w-px bg-zinc-100" />
+            <div className="hidden w-px bg-zinc-100 lg:block" />
             <AddressBlock
               role="noiva"
               partner={noiva}
@@ -376,17 +386,21 @@ export const BridalCoupleForm: React.FC<BridalCoupleFormProps> = ({
 
         {currentStep === 'pagamento' && (
           <div className="space-y-4 max-w-md">
-            <Select
-              label="Status do Pagamento"
+            <div className="flex flex-col gap-1.5">
+              <label className="ds-label">Status do Pagamento</label>
+              <Combobox
               value={paymentStatus}
-              onChange={(e) => setPaymentStatus(e.target.value as BridalPaymentStatus)}
+              onChange={(v) => setPaymentStatus(v as BridalPaymentStatus)}
               options={[
                 { value: 'Pendente', label: 'Pendente' },
                 { value: 'Parcial', label: 'Parcial' },
                 { value: 'Pago', label: 'Pago' },
                 { value: 'Isento', label: 'Isento' },
               ]}
+              placeholder="Selecione o status"
+              searchPlaceholder="Buscar status..."
             />
+            </div>
             <Input
               label="Valor"
               type="number"

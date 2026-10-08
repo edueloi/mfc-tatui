@@ -4,6 +4,18 @@
 
 O sistema agora utiliza **React Router DOM** para gerenciar a navegação com URLs reais.
 
+### Porta de entrada: site público e login
+
+| URL | Descrição |
+|-----|-----------|
+| `/site/` | Site público do MFC (arquivos em `sites/mfc-encontros/dist`, servidos na mesma porta do sistema) |
+| `/entrar` | Login do sistema. Aceita `?next=/caminho` para voltar ao endereço que a pessoa queria abrir |
+| `/` | Logado: painel. **Sem login: redireciona para o site** (`/site/`) |
+
+- Qualquer endereço do sistema sem login vai para `/entrar?next=<endereço>` e volta para ele depois de entrar. Sair do sistema leva ao site.
+- O botão "Área do sistema" do site leva ao `/entrar`. As páginas públicas de inscrição (`/eventos/inscricao/:token`, `/noivos/form/:token`) continuam abertas, sem login.
+- O site é editado em `sites/mfc-encontros/dist`; o Vite o serve em `/site/` (desenvolvimento) e copia para `front/dist/site` no build, que o backend já serve em produção. Não precisa subir o site em outra porta.
+
 ### Rotas Disponíveis
 
 | URL | Descrição | Componente | Acesso |

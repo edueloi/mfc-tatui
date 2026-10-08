@@ -348,6 +348,8 @@ export interface NucleationContact {
   name: string;
   phone1: string;
   phone2: string;
+  groupId?: string | null;
+  groupName?: string | null;
   status: NucleationStatus;
   convertedMemberId: string | null;
   createdAt: string;
@@ -356,4 +358,23 @@ export interface NucleationContact {
   attempts?: NucleationAttempt[];
   coupleNoivoName?: string | null;
   coupleNoivaName?: string | null;
+}
+
+export interface NucleationGroupHistory {
+  id: string;
+  groupId: string;
+  occurredAt: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface NucleationGroup {
+  id: string;
+  name: string;
+  description: string;
+  contactsCount: number;
+  createdAt: string;
+  updatedAt: string;
+  contacts?: NucleationContact[];
+  history?: NucleationGroupHistory[];
 }

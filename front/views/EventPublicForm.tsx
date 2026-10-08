@@ -8,6 +8,7 @@ import { BridalCoupleForm } from '../components/BridalCoupleForm';
 import { dateLabel } from '../utils/dates';
 import { maskPhone, unmask } from '../utils/masks';
 import { money } from '../utils/events';
+import coupleIllustration from '../../images/casal-noivo-noiva.png';
 
 interface PublicEvent {
   name: string; date: string; endDate: string; startTime: string; endTime: string; location: string; description: string; imageUrl: string;
@@ -65,16 +66,19 @@ const EventPublicForm: React.FC = () => {
     finally { setSavingCouple(false); }
   };
 
-  const shell = (children: React.ReactNode) => <main className="min-h-screen bg-slate-50 px-4 py-6 sm:py-10"><div className="mx-auto w-full max-w-xl space-y-4">{children}</div></main>;
+  const shell = (children: React.ReactNode, wide = false) => <main className="min-h-screen bg-slate-50 px-4 py-6 sm:py-10"><div className={`mx-auto w-full space-y-4 ${wide ? 'max-w-xl lg:max-w-4xl' : 'max-w-xl'}`}>{children}</div></main>;
 
   if (loading) return shell(<div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando…</div>);
   if (notFound || !event) return shell(<ContentCard><EmptyState icon={Ticket} title="Evento não encontrado" description="Confira o link recebido ou fale com quem convidou você." /></ContentCard>);
 
   return shell(<>
     <ContentCard padding="none" className="overflow-hidden">
-      {event.imageUrl && <img src={photoSrc(event.imageUrl)} alt={`Imagem do evento ${event.name}`} className="h-44 w-full object-cover" />}
+      {event.bridal ? <div className="relative h-44 overflow-hidden bg-gradient-to-br from-rose-100 via-rose-50 to-amber-50">
+        <div className="absolute inset-y-0 left-0 flex w-3/5 flex-col justify-center p-5"><p className="text-xs font-bold uppercase tracking-wider text-rose-600">MFC</p><p className="mt-1 text-base font-bold leading-tight text-rose-950">Encontro de Noivos</p><p className="mt-1 text-xs leading-relaxed text-rose-700">Um passo especial na preparação para o matrimônio.</p></div>
+        <img src={coupleIllustration} alt="Ilustração de noivo e noiva" className="absolute bottom-0 right-1 h-48 w-2/5 object-contain object-bottom" />
+      </div> : event.imageUrl && <img src={photoSrc(event.imageUrl)} alt={`Imagem do evento ${event.name}`} className="h-44 w-full object-cover" />}
       <div className="p-4">
-        <p className="text-xs font-medium text-blue-700">MFC · Movimento Familiar Cristão</p>
+        <p className="text-xs font-medium text-blue-700">{event.bridal ? 'Ficha externa · Encontro de Noivos' : 'MFC · Movimento Familiar Cristão'}</p>
         <h1 className="mt-1 text-lg font-semibold text-slate-900 break-words">{event.name}</h1>
         <ul className="mt-2 space-y-1 text-xs text-slate-600">
           <li className="flex items-center gap-1.5"><CalendarDays size={13} className="text-slate-400" />{dateLabel(event.date)}{event.endDate && event.endDate !== event.date ? ` a ${dateLabel(event.endDate)}` : ''}</li>
@@ -115,7 +119,7 @@ const EventPublicForm: React.FC = () => {
         {problem && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">{problem}</p>}
         <Button fullWidth loading={saving} onClick={submit}>Confirmar inscrição</Button>
       </div></ContentCard>}
-  </>);
+  </>, !!event.bridal);
 };
 
 export default EventPublicForm;

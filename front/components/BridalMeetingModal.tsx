@@ -13,7 +13,16 @@ interface BridalMeetingModalProps {
   onSaved: (meeting: BridalMeeting, mode: 'created' | 'updated') => void;
 }
 
-const blank = { name: '', date: '', startTime: '', endTime: '', location: '', pixKey: '', isActive: true };
+const suggestedMeetingName = (date: string) => {
+  if (!date) return '';
+  const [year, month] = date.split('-').map(Number);
+  if (!year || !month) return '';
+  const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date(year, month - 1, 1));
+  return `Encontro de Noivos — ${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} ${year}`;
+};
+
+const currentMonthSuggestion = () => suggestedMeetingName(new Date().toISOString().slice(0, 10));
+const blank = () => ({ name: currentMonthSuggestion(), date: '', startTime: '', endTime: '', location: '', pixKey: '', isActive: true });
 
 export const BridalMeetingModal: React.FC<BridalMeetingModalProps> = ({ isOpen, meeting, onClose, onSaved }) => {
   const [form, setForm] = useState(blank);
@@ -24,10 +33,14 @@ export const BridalMeetingModal: React.FC<BridalMeetingModalProps> = ({ isOpen, 
   useEffect(() => {
     if (!isOpen) return;
     setTouched(false);
-    setForm(meeting ? { name: meeting.name, date: meeting.date || '', startTime: meeting.startTime || '', endTime: meeting.endTime || '', location: meeting.location || '', pixKey: meeting.pixKey || '', isActive: meeting.isActive } : blank);
+    setForm(meeting ? { name: meeting.name, date: meeting.date || '', startTime: meeting.startTime || '', endTime: meeting.endTime || '', location: meeting.location || '', pixKey: meeting.pixKey || '', isActive: meeting.isActive } : blank());
   }, [isOpen, meeting]);
 
-  const set = (field: keyof typeof blank, value: string | boolean) => setForm(prev => ({ ...prev, [field]: value }));
+  const set = (field: keyof ReturnType<typeof blank>, value: string | boolean) => setForm(prev => ({ ...prev, [field]: value }));
+  const setDate = (date: string) => setForm(prev => {
+    const previousSuggestion = suggestedMeetingName(prev.date || new Date().toISOString().slice(0, 10));
+    return { ...prev, date, name: !meeting && (!prev.name || prev.name === previousSuggestion) ? suggestedMeetingName(date) : prev.name };
+  });
   const errors = {
     name: form.name.trim().length < 3 ? 'Informe o nome do encontro (mínimo 3 letras).' : '',
     date: !form.date ? 'Informe a data do encontro.' : '',
@@ -64,7 +77,7 @@ export const BridalMeetingModal: React.FC<BridalMeetingModalProps> = ({ isOpen, 
     </ModalFooter>}>
     <div className="space-y-3">
       <div><Input label="Nome" value={form.name} onChange={event => set('name', event.target.value)} placeholder="Ex.: Encontro de Noivos - Agosto 2026" />{err(errors.name)}</div>
-      <div><DatePicker label="Data" value={form.date} onChange={value => set('date', value || '')} />{err(errors.date)}</div>
+      <div><DatePicker label="Data" value={form.date} onChange={value => setDate(value || '')} />{err(errors.date)}</div>
       <div className="grid grid-cols-2 gap-3">
         <Input label="Início" type="time" value={form.startTime} onChange={event => set('startTime', event.target.value)} />
         <Input label="Término" type="time" value={form.endTime} onChange={event => set('endTime', event.target.value)} />

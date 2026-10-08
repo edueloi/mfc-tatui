@@ -26,9 +26,8 @@ interface LoginProps {
 type AuthView = 'login' | 'recover' | 'success';
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const publicSiteUrl = window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
-    : 'https://mfc-encontros.edueloi.chatgpt.site';
+  // O site público é servido junto com o sistema, em /site/.
+  const publicSiteUrl = '/site/';
   const [view, setView] = useState<AuthView>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -107,8 +106,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </p>
                 <a
                   href={publicSiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
                   className="inline-flex items-center gap-1.5 mt-4 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors"
                 >
                   Conheça o site público do MFC de Tatuí <ChevronRight className="w-3.5 h-3.5" />

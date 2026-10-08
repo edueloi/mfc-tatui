@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Phone, UserPlus, Heart, MessageCircle, Trash2, CheckCircle2, XCircle, Clock, History, ClipboardList, Loader2, PhoneCall, ExternalLink } from 'lucide-react';
 import { api } from '../api';
-import { NucleationAttempt, NucleationContact, User as UserType } from '../types';
+import { NucleationAttempt, NucleationContact, NucleationGroup, User as UserType } from '../types';
 import { PageWrapper, ContentCard, PanelCard, Button, Badge, EmptyState, ConfirmModal, DetailField, Tabs, DatePicker, Select, Input } from '../components/ui';
 import { usePermission } from '../src/hooks/usePermission';
 import { maskPhone } from '../utils/masks';
@@ -30,6 +30,7 @@ const NucleationDetail: React.FC = () => {
 
   const [list, setList] = useState<NucleationContact[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
+  const [groups, setGroups] = useState<NucleationGroup[]>([]);
   const [contact, setContact] = useState<NucleationContact | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -42,11 +43,12 @@ const NucleationDetail: React.FC = () => {
   const [converting, setConverting] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingGroup, setSavingGroup] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.getNucleationContacts(), api.getUsers().catch(() => [])])
-      .then(([items, userItems]) => { if (!cancelled) { setList(items); setUsers(userItems); setError(false); } })
+    Promise.all([api.getNucleationContacts(), api.getUsers().catch(() => []), api.getNucleationGroups().catch(() => [])])
+      .then(([items, userItems, groupItems]) => { if (!cancelled) { setList(items); setUsers(userItems); setGroups(groupItems); setError(false); } })
       .catch(() => { if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -122,6 +124,20 @@ const NucleationDetail: React.FC = () => {
     }
   };
 
+  const setGroup = async (groupId: string) => {
+    if (!contact || savingGroup) return;
+    setSavingGroup(true);
+    try {
+      const updated: NucleationContact = await api.setNucleationContactGroup(contact.id, groupId || null);
+      const group = groups.find(item => item.id === (groupId || null));
+      setContact({ ...updated, groupName: group?.name || null });
+      setList(prev => prev.map(item => item.id === updated.id ? { ...item, ...updated, groupName: group?.name || null } : item));
+      toast.success(groupId ? 'Contato vinculado ao grupo.' : 'Contato removido do grupo.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível alterar o grupo.');
+    } finally { setSavingGroup(false); }
+  };
+
   if (loading || (target && !contact && !error)) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando contato…</div></PageWrapper>;
 
   if (error || !contact) return <PageWrapper><ContentCard><EmptyState icon={PhoneCall}
@@ -134,6 +150,7 @@ const NucleationDetail: React.FC = () => {
   const attempts = [...(contact.attempts || [])].sort((a: NucleationAttempt, b: NucleationAttempt) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   const phones = [contact.phone1, contact.phone2].filter(Boolean);
   const origin = [contact.coupleNoivoName, contact.coupleNoivaName].filter(Boolean).join(' & ');
+  const groupName = contact.groupName || groups.find(group => group.id === contact.groupId)?.name;
 
   return (
     <PageWrapper>
@@ -156,6 +173,7 @@ const NucleationDetail: React.FC = () => {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge dot color={STATUS_COLOR[contact.status] || 'default'}>{contact.status}</Badge>
                   {origin && <Badge color="purple" icon={<Heart size={10} />}>Encontro de Noivos: {origin}</Badge>}
+                  {groupName && <Badge color="info">Grupo: {groupName}</Badge>}
                   <span className="text-xs text-slate-500">{attempts.length} {attempts.length === 1 ? 'tentativa' : 'tentativas'}</span>
                 </div>
               </div>
@@ -206,11 +224,14 @@ const NucleationDetail: React.FC = () => {
           </div>}
 
           {activeTab === 'dados' && <PanelCard title="Dados do contato">
+            {canEdit && <div className="mb-4 max-w-sm"><Select label="Grupo de nucleação" value={contact.groupId || ''} onChange={event => setGroup(event.target.value)} disabled={savingGroup}
+              options={[{ value: '', label: 'Sem grupo' }, ...groups.map(group => ({ value: group.id, label: group.name }))]} /></div>}
             <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
               <DetailField label="Nome" value={contact.name} />
               <DetailField label="Telefone 1" value={maskPhone(contact.phone1 || '')} />
               <DetailField label="Telefone 2" value={maskPhone(contact.phone2 || '')} />
               <DetailField label="Status" value={contact.status} />
+              <DetailField label="Grupo" value={groupName || 'Sem grupo'} />
               <DetailField label="Origem" value={origin ? `Encontro de Noivos (${origin})` : 'Cadastro manual'} />
               <DetailField label="Cadastrado em" value={dateLabel(contact.createdAt)} />
               <DetailField label="Última atualização" value={dateLabel(contact.updatedAt)} />

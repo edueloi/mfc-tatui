@@ -165,6 +165,11 @@ export const api = {
     request(`/nucleation/${id}/attempts`, { method: 'POST', body: JSON.stringify(data) }),
   updateNucleationAttempt: (attemptId: string, data: any) =>
     request(`/nucleation/attempts/${attemptId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getNucleationGroups: () => request('/nucleation/groups'),
+  getNucleationGroup: (id: string) => request(`/nucleation/groups/${id}`),
+  createNucleationGroup: (data: any) => request('/nucleation/groups', { method: 'POST', body: JSON.stringify(data) }),
+  createNucleationGroupHistory: (id: string, data: any) => request(`/nucleation/groups/${id}/history`, { method: 'POST', body: JSON.stringify(data) }),
+  setNucleationContactGroup: (id: string, groupId: string | null) => request(`/nucleation/${id}/group`, { method: 'PUT', body: JSON.stringify({ groupId }) }),
   convertNucleationContact: (id: string, data: any = {}) =>
     request(`/nucleation/${id}/convert`, { method: 'POST', body: JSON.stringify(data) })
 };

@@ -5,6 +5,7 @@ import { Heart, CheckCircle2, AlertCircle, Calendar, Clock, MapPin, Wallet } fro
 import { api } from '../api';
 import { BridalCouple, BridalMeeting } from '../types';
 import { BridalCoupleForm, BridalCoupleFormData } from '../components/BridalCoupleForm';
+import coupleIllustration from '../../images/casal-noivo-noiva.png';
 
 type Status = 'loading' | 'ready' | 'not-found' | 'submitted';
 
@@ -86,6 +87,12 @@ const BridalPublicForm: React.FC = () => {
 
         {status === 'ready' && couple && (
           <>
+            <div className="relative mb-8 min-h-44 overflow-hidden rounded-2xl border border-rose-100 bg-gradient-to-r from-rose-50 via-white to-amber-50 p-5 pr-40 sm:min-h-48 sm:pr-52">
+              <img src={coupleIllustration} alt="Ilustração de noivo e noiva" className="absolute bottom-0 right-2 h-44 w-40 object-contain object-bottom sm:right-5 sm:h-48 sm:w-48" />
+              <p className="text-xs font-bold uppercase tracking-wider text-rose-600">Encontro de Noivos</p>
+              <h2 className="mt-1 text-lg font-bold text-rose-950">Ficha do casal</h2>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600">Confiram e completem as informações de vocês antes de enviar.</p>
+            </div>
             {/* Texto institucional */}
             <div className="mb-8 pb-8 border-b border-zinc-100">
               <div className="text-center mb-6">

@@ -203,6 +203,8 @@ const Layout: React.FC<LayoutProps> = ({ currentUser, onLogout }) => {
           {!isCollapsed && (
             <button
               onClick={onLogout}
+              aria-label="Sair"
+              title="Sair"
               className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
             >
               <LogOut size={16} />
