@@ -74,7 +74,7 @@ export function Pagination({
 
   return (
     <div className={cn(
-      "flex flex-wrap items-center justify-between gap-3 px-3 py-2 border-t border-zinc-100 bg-zinc-50/30",
+      "ui-pagination flex flex-wrap items-center justify-between gap-3 px-3 py-2 border-t border-zinc-100 bg-zinc-50/30",
       className,
     )}>
       {/* Left: count info */}
@@ -91,7 +91,7 @@ export function Pagination({
         <div className="hidden items-center gap-1 sm:flex">
         {pageNumbers.map((p, idx) =>
           p === "..." ? (
-            <span key={`e${idx}`} className="w-8 text-center text-xs text-zinc-300 font-bold">…</span>
+            <span key={`e${idx}`} className="w-8 text-center text-xs text-zinc-300 font-medium">…</span>
           ) : (
             <button
               key={p}
@@ -100,7 +100,7 @@ export function Pagination({
               aria-current={p === page ? 'page' : undefined}
               onClick={() => onPageChange(p as number)}
               className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-md text-xs font-semibold transition-all",
+                "w-8 h-8 flex items-center justify-center rounded-md text-xs font-medium transition-all",
                 p === page
                   ? "bg-blue-400 text-white border border-blue-400 shadow-sm"
                   : "bg-white border border-zinc-200 text-zinc-600 hover:border-blue-300 hover:text-blue-600",
@@ -124,7 +124,7 @@ export function Pagination({
             aria-label="Registros por página"
             value={pageSize}
             onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
-            className="h-8 px-2 text-xs font-semibold text-zinc-700 bg-white border border-zinc-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 transition-all cursor-pointer"
+            className="h-8 px-2 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 transition-all cursor-pointer"
           >
             {PAGE_SIZE_OPTIONS.map(s => (
               <option key={s} value={s}>{s}</option>

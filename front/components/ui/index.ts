@@ -19,6 +19,9 @@ export type { UploadedFileItem } from './FileUpload';
 export { Toast, ToastProvider, useToast } from './Toast';
 export type { ToastType } from './Toast';
 export { Badge, StatusBadge, PaymentBadge } from './Badge';
+export { Alert } from './Alert';
+export type { AlertProps } from './Alert';
+export { uiTheme } from './theme';
 
 // ── Layout / Estrutura ─────────────────────────────────────────────────────
 export { PageWrapper, SectionTitle, StatGrid, ContentCard, FormRow, Divider } from './PageWrapper';

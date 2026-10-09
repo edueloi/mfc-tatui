@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PageWrapper — Design System
@@ -80,7 +81,7 @@ export function SectionTitle({
         )}
 
         <div className="min-w-0">
-          <h1 className="truncate font-display text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
+          <h1 className="truncate font-display text-base font-medium tracking-tight text-slate-900 sm:text-lg">
             {title}
           </h1>
 
@@ -93,7 +94,7 @@ export function SectionTitle({
       </div>
 
       {action && (
-        <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {action}
         </div>
       )}
@@ -155,14 +156,13 @@ export function ContentCard({
   return (
     <div
       className={cn(
-        "border border-slate-200 bg-white",
-        "rounded-lg",
+        uiTheme.surface,
         paddingMap[padding],
         className
       )}
       {...props}
     >
-      {title && <h3 className="mb-3 text-[13px] font-semibold text-slate-800">{title}</h3>}
+      {title && <h3 className="mb-3 text-[13px] font-medium text-slate-800">{title}</h3>}
       {children}
     </div>
   );

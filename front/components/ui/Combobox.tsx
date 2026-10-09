@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, X, Check, Search, Plus } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 export interface ComboboxOption {
   value: string;
@@ -262,6 +263,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
                 <button
                   type="button"
                   onClick={e => handleRemove(e, selectedValues[i])}
+                  aria-label={`Remover ${label}`}
                   className="shrink-0 hover:text-red-500 transition-colors"
                 >
                   <X size={10} />
@@ -269,7 +271,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
               </span>
             ))
           ) : (
-            <span className="truncate text-zinc-900 font-semibold text-xs">{selectedLabels[0]}</span>
+            <span className="truncate text-zinc-900 font-medium text-xs">{selectedLabels[0]}</span>
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -277,6 +279,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onChange(""); }}
+              aria-label="Limpar seleção"
               className="p-0.5 rounded hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-colors"
             >
               <X size={12} />
@@ -298,7 +301,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
           data-ui-popover
           style={dropdownStyle}
           className={cn(
-            "bg-white border border-zinc-200 rounded-lg shadow-lg overflow-hidden",
+            uiTheme.popover,
             openUpward ? "flex flex-col-reverse" : "flex flex-col"
           )}
         >
@@ -324,6 +327,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
               <button
                 type="button"
                 onClick={() => setSearch("")}
+                aria-label="Limpar busca"
                 className="text-zinc-300 hover:text-zinc-500 transition-colors"
               >
                 <X size={11} />
@@ -353,7 +357,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
                             GROUP_DOT[group] ?? "bg-zinc-400"
                           )} />
                           <span className={cn(
-                            "text-[9px] font-semibold uppercase tracking-normal px-1.5 py-0.5 rounded-md border",
+                            "text-[9px] font-medium uppercase tracking-normal px-1.5 py-0.5 rounded-md border",
                             GROUP_STYLES[group] ?? "text-zinc-500 bg-zinc-50 border-zinc-200"
                           )}>
                             {group}
@@ -383,14 +387,14 @@ export const Combobox: React.FC<ComboboxProps> = ({
                               {isSelected && <Check size={10} className="text-white" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs font-semibold text-zinc-800 truncate">{opt.label}</div>
+                              <div className="text-xs font-medium text-zinc-800 truncate">{opt.label}</div>
                               {opt.subtitle && (
                                 <div className="text-[10px] text-zinc-400 truncate">{opt.subtitle}</div>
                               )}
                             </div>
                             {opt.badge && (
                               <span className={cn(
-                                "text-[9px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0",
+                                "text-[9px] font-medium px-1.5 py-0.5 rounded-md border shrink-0",
                                 opt.badgeColor ?? "bg-zinc-50 text-zinc-500 border-zinc-200"
                               )}>
                                 {opt.badge}
@@ -423,14 +427,14 @@ export const Combobox: React.FC<ComboboxProps> = ({
                           {isSelected && <Check size={10} className="text-white" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs font-semibold text-zinc-800 truncate">{opt.label}</div>
+                          <div className="text-xs font-medium text-zinc-800 truncate">{opt.label}</div>
                           {opt.subtitle && (
                             <div className="text-[10px] text-zinc-400 truncate">{opt.subtitle}</div>
                           )}
                         </div>
                         {opt.badge && (
                           <span className={cn(
-                            "text-[9px] font-semibold px-1.5 py-0.5 rounded-md border shrink-0",
+                            "text-[9px] font-medium px-1.5 py-0.5 rounded-md border shrink-0",
                             opt.badgeColor ?? "bg-zinc-50 text-zinc-500 border-zinc-200"
                           )}>
                             {opt.badge}

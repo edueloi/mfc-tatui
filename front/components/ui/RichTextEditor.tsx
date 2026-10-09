@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback, useState } from "react";
+import { LinkDialog, ImageDialog, type ImageFloat } from "./EditorDialogs";
 
 /* ─── tipos ──────────────────────────────────────────────────────────────── */
 interface RichTextEditorProps {
@@ -8,7 +9,7 @@ interface RichTextEditorProps {
   minHeight?: number;
 }
 
-type ImageFloat = "none" | "left" | "right" | "center";
+
 
 /* ─── constantes ─────────────────────────────────────────────────────────── */
 const FONT_SIZES = ["10","11","12","13","14","16","18","20","24","28","32","36","48","64"];
@@ -45,13 +46,16 @@ function ToolBtn({ title, active, onClick, children, style }: {
     <button
       type="button"
       title={title}
-      onMouseDown={e => { e.preventDefault(); onClick(); }}
+      onMouseDown={e => e.preventDefault()}
+      onClick={onClick}
+      aria-label={title}
+      className="ui-editor-tool"
       style={{
         width: 28, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: active ? "#f59e0b" : "transparent",
+        background: active ? "#2563eb" : "transparent",
         color: active ? "#fff" : "#374151",
-        fontSize: 13, fontWeight: 700, flexShrink: 0,
+        fontSize: 13, fontWeight: 500, flexShrink: 0,
         transition: "background 0.12s",
         ...style,
       }}
@@ -102,165 +106,6 @@ function ColorPicker({ colors, onPick, onClose }: {
   );
 }
 
-/* ─── Link Dialog ────────────────────────────────────────────────────────── */
-function LinkDialog({ onConfirm, onClose }: { onConfirm: (url: string, text: string) => void; onClose: () => void }) {
-  const [url, setUrl] = useState("https://");
-  const [text, setText] = useState("");
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.3)" }}
-      onMouseDown={onClose}
-    >
-      <div style={{ background: "#fff", borderRadius: 16, padding: 24, width: 380, boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onMouseDown={e => e.stopPropagation()}>
-        <p style={{ fontSize: 14, fontWeight: 800, margin: "0 0 16px", color: "#111" }}>Inserir Hiperlink</p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-          <input value={text} onChange={e => setText(e.target.value)} placeholder="Texto do link (opcional)" style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
-          <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://..." style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
-        </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" onClick={onClose} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Cancelar</button>
-          <button type="button" onClick={() => { onConfirm(url, text); onClose(); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#f59e0b", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Inserir</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Image Dialog ───────────────────────────────────────────────────────── */
-function ImageDialog({ onConfirm, onClose }: {
-  onConfirm: (url: string, alt: string, width: string, float: ImageFloat) => void;
-  onClose: () => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [url, setUrl] = useState("");
-  const [alt, setAlt] = useState("");
-  const [width, setWidth] = useState("100%");
-  const [float, setFloat] = useState<ImageFloat>("none");
-  const [uploading, setUploading] = useState(false);
-  const [tab, setTab] = useState<"url" | "file">("url");
-
-  const handleFile = (file: File) => {
-    setUploading(true);
-    const reader = new FileReader();
-    reader.onload = e => { setUrl(e.target?.result as string); setUploading(false); };
-    reader.readAsDataURL(file);
-  };
-
-  const FLOAT_OPTIONS: { value: ImageFloat; label: string; icon: string }[] = [
-    { value: "none",   label: "Bloco",    icon: "⬜" },
-    { value: "center", label: "Centro",   icon: "⬛" },
-    { value: "left",   label: "Esquerda", icon: "◧" },
-    { value: "right",  label: "Direita",  icon: "◨" },
-  ];
-
-  const WIDTH_PRESETS = ["25%","33%","50%","66%","75%","100%","200px","300px","400px","500px"];
-
-  return (
-    <div
-      style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.35)", backdropFilter: "blur(2px)" }}
-      onMouseDown={onClose}
-    >
-      <div
-        style={{ background: "#fff", borderRadius: 18, padding: 24, width: 460, maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.22)" }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        <p style={{ fontSize: 15, fontWeight: 800, margin: "0 0 16px", color: "#111" }}>Inserir Imagem</p>
-
-        <div style={{ display: "flex", gap: 0, borderRadius: 10, border: "1px solid #e5e7eb", overflow: "hidden", marginBottom: 14 }}>
-          {(["url","file"] as const).map(t => (
-            <button key={t} type="button" onClick={() => setTab(t)}
-              style={{ flex: 1, padding: "8px 0", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer",
-                background: tab === t ? "#f59e0b" : "#fff", color: tab === t ? "#fff" : "#6b7280", transition: "all 0.15s" }}
-            >
-              {t === "url" ? "🔗 URL" : "📁 Do dispositivo"}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
-          {tab === "url" ? (
-            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://exemplo.com/imagem.jpg"
-              style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
-          ) : (
-            <>
-              <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                style={{ padding: "14px 0", border: "2px dashed #e5e7eb", borderRadius: 10, background: "#fafafa",
-                  cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#6b7280" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#f59e0b"; (e.currentTarget as HTMLElement).style.color = "#f59e0b"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e5e7eb"; (e.currentTarget as HTMLElement).style.color = "#6b7280"; }}
-              >
-                {uploading ? "Carregando..." : "Clique para escolher imagem"}
-              </button>
-            </>
-          )}
-
-          <input value={alt} onChange={e => setAlt(e.target.value)} placeholder="Descrição (texto alternativo)"
-            style={{ padding: "9px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
-
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Tamanho inicial</p>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-              {WIDTH_PRESETS.map(p => (
-                <button key={p} type="button" onClick={() => setWidth(p)}
-                  style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                    borderColor: width === p ? "#f59e0b" : "#e5e7eb",
-                    background: width === p ? "#fffbeb" : "#fff",
-                    color: width === p ? "#d97706" : "#6b7280" }}
-                >{p}</button>
-              ))}
-            </div>
-            <input value={width} onChange={e => setWidth(e.target.value)} placeholder="ex: 50% ou 300px"
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-          </div>
-
-          <div>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Posição no texto</p>
-            <div style={{ display: "flex", gap: 6 }}>
-              {FLOAT_OPTIONS.map(opt => (
-                <button key={opt.value} type="button" onClick={() => setFloat(opt.value)}
-                  style={{ flex: 1, padding: "8px 4px", borderRadius: 8, border: "1.5px solid", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                    borderColor: float === opt.value ? "#f59e0b" : "#e5e7eb",
-                    background: float === opt.value ? "#fffbeb" : "#fff",
-                    color: float === opt.value ? "#d97706" : "#6b7280",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}
-                >
-                  <span style={{ fontSize: 18 }}>{opt.icon}</span>
-                  <span>{opt.label}</span>
-                </button>
-              ))}
-            </div>
-            <p style={{ fontSize: 10, color: "#9ca3af", marginTop: 6 }}>
-              {float === "left" && "Imagem à esquerda — texto flui à direita"}
-              {float === "right" && "Imagem à direita — texto flui à esquerda"}
-              {float === "center" && "Imagem centralizada — sem texto ao lado"}
-              {float === "none" && "Imagem em bloco — ocupa a largura definida"}
-            </p>
-          </div>
-
-          {url && (
-            <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", padding: 8, background: "#fafafa", textAlign: "center" }}>
-              <img src={url} alt="preview" style={{ maxHeight: 140, maxWidth: "100%", objectFit: "contain", borderRadius: 6 }}
-                onError={e => { (e.currentTarget as HTMLElement).style.display = "none"; }} />
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" onClick={onClose}
-            style={{ padding: "9px 18px", borderRadius: 9, border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-            Cancelar
-          </button>
-          <button type="button" onClick={() => { if (url) { onConfirm(url, alt, width, float); onClose(); } }} disabled={!url}
-            style={{ padding: "9px 18px", borderRadius: 9, border: "none", background: url ? "#f59e0b" : "#e5e7eb", color: url ? "#fff" : "#9ca3af", cursor: url ? "pointer" : "default", fontSize: 13, fontWeight: 700 }}>
-            Inserir
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ─── Image Resize Overlay ───────────────────────────────────────────────── */
 // Rendered as a portal-like overlay on top of the selected image
 interface ResizeState {
@@ -273,6 +118,21 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
   const editorRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const isInternalChange = useRef(false);
+  const savedSelection = useRef<Range | null>(null);
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    savedSelection.current = selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)
+      ? selection.getRangeAt(0).cloneRange() : null;
+  };
+  const restoreSelection = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const selection = window.getSelection();
+    const range = savedSelection.current || document.createRange();
+    if (!savedSelection.current) { range.selectNodeContents(editor); range.collapse(false); }
+    selection?.removeAllRanges(); selection?.addRange(range);
+  };
 
   const [showTextColors, setShowTextColors] = useState(false);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
@@ -461,12 +321,19 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
   };
 
   const insertLink = (url: string, text: string) => {
-    const linkText = text || url;
-    exec("insertHTML", `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#f59e0b;font-weight:700;">${linkText}</a>`);
+    restoreSelection();
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = text || url;
+    link.style.cssText = 'color:#2563eb;font-weight:500;';
+    exec('insertHTML', link.outerHTML);
     handleInput();
   };
 
   const insertImage = (url: string, alt: string, width: string, float: ImageFloat) => {
+    restoreSelection();
     let style = "";
     if (float === "left") {
       style = `float:left;width:${width};margin:4px 20px 8px 0;border-radius:10px;cursor:pointer;`;
@@ -477,9 +344,10 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
     } else {
       style = `display:block;width:${width};border-radius:10px;margin:12px 0;cursor:pointer;`;
     }
+    const image = document.createElement('img');
+    image.src = url; image.alt = alt; image.style.cssText = style;
     const html = (float === "left" || float === "right")
-      ? `<p style="overflow:hidden;"><img src="${url}" alt="${alt}" style="${style}" />&nbsp;</p>`
-      : `<img src="${url}" alt="${alt}" style="${style}" />`;
+      ? `<p style="overflow:hidden;">${image.outerHTML}&nbsp;</p>` : image.outerHTML;
     exec("insertHTML", html);
     handleInput();
   };
@@ -547,7 +415,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
           onMouseDown={e => e.stopPropagation()}
           onChange={e => { exec("formatBlock", e.target.value); e.target.value = "p"; }}
           defaultValue="p"
-          style={{ height: 28, padding: "0 6px", borderRadius: 6, border: "1px solid #e5e7eb", fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#fff", color: "#374151", flexShrink: 0 }}
+          style={{ height: 28, padding: "0 6px", borderRadius: 6, border: "1px solid #e5e7eb", fontSize: 12, fontWeight: 500, cursor: "pointer", background: "#fff", color: "#374151", flexShrink: 0 }}
         >
           <option value="p">Parágrafo</option>
           <option value="h1">H1 — Título</option>
@@ -655,13 +523,13 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
         <TDivider />
 
         {/* Link */}
-        <ToolBtn title="Inserir hiperlink" onClick={() => setShowLinkDialog(true)}>
+        <ToolBtn title="Inserir hiperlink" onClick={() => { saveSelection(); setShowLinkDialog(true); }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         </ToolBtn>
         <ToolBtn title="Remover link" onClick={() => exec("unlink")}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="2" y1="2" x2="22" y2="22" stroke="#ef4444"/></svg>
         </ToolBtn>
-        <ToolBtn title="Inserir imagem" onClick={() => setShowImageDialog(true)}>
+        <ToolBtn title="Inserir imagem" onClick={() => { saveSelection(); setShowImageDialog(true); }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         </ToolBtn>
 
@@ -733,7 +601,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
           {/* Selection border */}
           <div style={{
             position: "absolute", inset: 0,
-            border: "2px solid #f59e0b",
+            border: "2px solid #2563eb",
             borderRadius: 4,
             pointerEvents: "none",
           }} />
@@ -765,7 +633,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
                 width: 10, height: 10,
                 borderRadius: 2,
                 background: "#fff",
-                border: "2px solid #f59e0b",
+                border: "2px solid #2563eb",
                 cursor: h.cursor,
                 pointerEvents: "all",
                 zIndex: 11,
@@ -804,7 +672,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); changeImgFloat(opt.f); }}
                 style={{
                   width: 26, height: 26, borderRadius: 5, border: "none", cursor: "pointer", fontSize: 13,
-                  background: imgFloat === opt.f ? "#f59e0b" : "transparent",
+                  background: imgFloat === opt.f ? "#2563eb" : "transparent",
                   color: "#fff",
                 }}
               >{opt.icon}</button>
@@ -855,8 +723,8 @@ export function RichTextEditor({ value, onChange, placeholder = "Comece a escrev
         .rich-editor-content img {
           max-width: 100%; border-radius: 10px; cursor: pointer;
         }
-        .rich-editor-content img:hover { outline: 2px solid #f59e0b; outline-offset: 2px; }
-        .rich-editor-content a { color: #f59e0b; font-weight: 700; text-decoration: none; }
+        .rich-editor-content img:hover { outline: 2px solid #2563eb; outline-offset: 2px; }
+        .rich-editor-content a { color: #2563eb; font-weight: 500; text-decoration: none; }
         .rich-editor-content a:hover { text-decoration: underline; }
         .rich-editor-content table { width: 100%; border-collapse: collapse; }
         .rich-editor-content td, .rich-editor-content th {

@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "motion/react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // StatCard — Design System
@@ -87,7 +88,7 @@ export function StatCard({
       transition={{ delay, duration: 0.2, ease: "easeOut" }}
       className={cn(
         "rounded-lg shadow-none relative overflow-hidden transition-all duration-200 group p-3",
-        variant === "default" ? "bg-white border border-slate-200 hover:border-slate-300" : "bg-slate-50/50 border border-transparent hover:bg-slate-50",
+        variant === "default" ? `${uiTheme.surface} hover:border-slate-300` : "bg-slate-50/50 border border-transparent hover:bg-slate-50",
         className
       )}
     >
@@ -105,7 +106,7 @@ export function StatCard({
         {trend && (
           <div
             className={cn(
-              "flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[9px] font-bold",
+              "flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[9px] font-medium",
               trend.isUp
                 ? "bg-emerald-50 text-emerald-600 border-emerald-200"
                 : "bg-red-50 text-red-500 border-red-200"
@@ -125,7 +126,7 @@ export function StatCard({
         <p className="text-[11px] font-medium text-slate-500 mb-0.5 truncate">
           {title}
         </p>
-        <h3 className="text-base font-bold text-slate-900 tracking-tight leading-none">
+        <h3 className="text-base font-medium text-slate-900 tracking-tight leading-none">
           {formattedValue}
         </h3>
         {description && (

@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Upload, FileText, X, Loader2 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 export interface UploadedFileItem {
   id: string;
@@ -74,6 +75,7 @@ export function FileUpload({
         onClick={() => { if (!uploading) inputRef.current?.click(); }}
         className={cn(
           "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-3 py-4 text-center cursor-pointer transition-colors",
+          uiTheme.focus,
           dragOver ? "border-blue-400 bg-blue-50/50" : "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50/30"
         )}
       >
@@ -90,7 +92,7 @@ export function FileUpload({
         ) : (
           <Upload className="w-4 h-4 text-zinc-400" />
         )}
-        <p className="text-xs font-bold text-zinc-600">
+        <p className="text-xs font-medium text-zinc-600">
           {uploading ? 'Enviando...' : 'Clique ou arraste o arquivo aqui'}
         </p>
         {hint && <p className="text-[10px] text-zinc-400">{hint}</p>}
@@ -109,7 +111,8 @@ export function FileUpload({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); handleRemove(f.id); }}
                 disabled={removingId === f.id}
-                className="text-zinc-400 hover:text-red-500 transition-colors shrink-0"
+                aria-label={`Remover ${f.fileName}`}
+                className={cn('text-zinc-400 hover:text-red-500 transition-colors shrink-0 rounded', uiTheme.focus)}
               >
                 {removingId === f.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
               </button>

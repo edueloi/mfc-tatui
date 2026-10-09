@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { ToastProvider } from './components/ui/Toast';
 import Layout from './components/Layout';
 import Dashboard from './views/Dashboard';
 import Members from './views/Members';
@@ -66,30 +66,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-            fontWeight: 600,
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
+    <ToastProvider>
       <BrowserRouter>
         <Routes>
           {/* Rota pública — sem login, sem sidebar */}
@@ -147,7 +124,7 @@ const App: React.FC = () => {
           )}
         </Routes>
       </BrowserRouter>
-    </>
+    </ToastProvider>
   );
 };
 

@@ -3,7 +3,7 @@ import { cn } from "@/src/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Input — Design System
-// Altura: h-10 mobile / h-11 sm+  (usa classe ds-input do CSS global)
+// Altura padrão: 34px. Labels e campos base pertencem a ui/styles.css.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
@@ -54,7 +54,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             </label>
             {showCount && maxLength !== undefined && (
               <span className={cn(
-                "text-[10px] font-bold tabular-nums transition-colors",
+                "text-[10px] font-medium tabular-nums transition-colors",
                 currentLen >= maxLength ? "text-red-500" : nearLimit ? "text-amber-500" : "text-zinc-400"
               )}>
                 {currentLen}/{maxLength}
@@ -73,7 +73,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         >
           {addonLeft && (
             <div className={cn(
-              "flex items-center justify-center bg-zinc-100 px-3.5 border-r border-zinc-200 text-xs font-semibold text-zinc-500 whitespace-nowrap select-none shrink-0 group-focus-within:bg-zinc-50/50 transition-colors",
+              "flex items-center justify-center bg-zinc-100 px-3.5 border-r border-zinc-200 text-xs font-medium text-zinc-500 whitespace-nowrap select-none shrink-0 group-focus-within:bg-zinc-50/50 transition-colors",
               size === "sm" && "px-2 text-[10px]",
               size === "lg" && "px-5 text-sm"
             )}>
@@ -115,7 +115,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
           {addonRight && (
             <div className={cn(
-              "flex items-center justify-center bg-zinc-100 px-3.5 border-l border-zinc-200 text-xs font-semibold text-zinc-500 whitespace-nowrap select-none shrink-0 group-focus-within:bg-zinc-50/50 transition-colors",
+              "flex items-center justify-center bg-zinc-100 px-3.5 border-l border-zinc-200 text-xs font-medium text-zinc-500 whitespace-nowrap select-none shrink-0 group-focus-within:bg-zinc-50/50 transition-colors",
               size === "sm" && "px-2 text-[10px]",
               size === "lg" && "px-5 text-sm"
             )}>
@@ -125,7 +125,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         </div>
 
         {error && (
-          <p className="text-[11px] font-semibold text-red-500">{error}</p>
+          <p className="text-[11px] font-medium text-red-500">{error}</p>
         )}
         {hint && !error && (
           <p className="text-[11px] text-zinc-400">{hint}</p>
@@ -161,7 +161,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             </label>
             {maxLength !== undefined && (
               <span className={cn(
-                "text-[10px] font-bold tabular-nums transition-colors",
+                "text-[10px] font-medium tabular-nums transition-colors",
                 currentLen >= maxLength ? "text-red-500" : nearLimit ? "text-amber-500" : "text-zinc-400"
               )}>
                 {currentLen}/{maxLength}
@@ -189,7 +189,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         />
 
         {error && (
-          <p className="text-[11px] font-semibold text-red-500">{error}</p>
+          <p className="text-[11px] font-medium text-red-500">{error}</p>
         )}
         {hint && !error && (
           <p className="text-[11px] text-zinc-400">{hint}</p>
@@ -277,7 +277,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         </div>
 
         {error && (
-          <p className="text-[11px] font-semibold text-red-500">{error}</p>
+          <p className="text-[11px] font-medium text-red-500">{error}</p>
         )}
         {hint && !error && (
           <p className="text-[11px] text-zinc-400">{hint}</p>

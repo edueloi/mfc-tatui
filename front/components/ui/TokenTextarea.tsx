@@ -108,7 +108,7 @@ export function TokenTextarea({
       {/* Variáveis disponíveis */}
       {availableVars.length > 0 && (
         <div>
-          <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-normal mb-1.5">
+          <p className="text-[10px] font-medium text-zinc-400 uppercase tracking-normal mb-1.5">
             Clique para inserir variável:
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -118,7 +118,7 @@ export function TokenTextarea({
                 type="button"
                 title={v.desc}
                 onClick={() => insertVar(v.key)}
-                className="text-[11px] px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono rounded-lg hover:bg-blue-100 transition-colors font-semibold"
+                className="text-[11px] px-2.5 py-1 bg-blue-50 border border-blue-200 text-blue-700 font-mono rounded-lg hover:bg-blue-100 transition-colors font-medium"
               >
                 {v.key}
               </button>
@@ -139,30 +139,7 @@ export function TokenTextarea({
         className="token-editor w-full border border-zinc-200 rounded-lg px-3 py-2 text-[13px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-400/20 focus:border-blue-300 transition-all bg-white text-zinc-800 font-medium"
       />
 
-      <style>{`
-        .token-editor:empty::before {
-          content: attr(data-placeholder);
-          color: #a1a1aa;
-          pointer-events: none;
-        }
-        .token-editor br { display: block; }
-        .token-chip {
-          display: inline-flex;
-          align-items: center;
-          padding: 1px 8px;
-          margin: 0 2px;
-          background: #fef3c7;
-          border: 1px solid #fcd34d;
-          color: #92400e;
-          border-radius: 99px;
-          font-size: 11px;
-          font-weight: 700;
-          font-family: ui-monospace, monospace;
-          user-select: none;
-          cursor: default;
-          white-space: nowrap;
-        }
-      `}</style>
+
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { cn } from "@/src/lib/utils";
 //
 // Cores semânticas:
 //   default   → zinc
-//   primary   → amber (cor da marca)
+//   primary   → azul (cor da marca)
 //   success   → emerald
 //   warning   → amber escuro
 //   danger    → red

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { cn } from "@/src/lib/utils";
 import { isHoliday } from '@/src/lib/holidays';
+import { uiTheme } from './theme';
 
 interface DatePickerProps {
   value?: string | null;
@@ -87,6 +88,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   hint,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputId = React.useId();
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const selectedDate = useMemo(() => parseISODate(value), [value]);
 
@@ -126,8 +128,21 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         setIsOpen(false);
       }
     };
-    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
+      containerRef.current?.querySelector('input')?.focus();
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape, true);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape, true);
+    };
   }, [isOpen]);
 
   const calendarDays = useMemo(() => getCalendarDays(viewDate), [viewDate]);
@@ -197,23 +212,23 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   const dropdown = isOpen ? createPortal(
     <div
       ref={dropdownRef}
-      data-ui-popover className="fixed z-[10000] w-[280px] max-w-[calc(100vw-16px)] rounded-lg border border-zinc-200 bg-white shadow-lg overflow-hidden"
+      data-ui-popover className={cn('ui-date-popover fixed z-[10000] w-[280px] max-w-[calc(100vw-16px)]', uiTheme.popover)}
       style={{ top: coords.top, left: coords.left }}
     >
       <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2 bg-zinc-50">
-        <button type="button" onClick={handlePrev} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 transition">
+        <button type="button" onClick={handlePrev} aria-label="Período anterior" className={cn('rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 transition', uiTheme.focus)}>
           <ChevronLeft size={16} />
         </button>
         <button
           type="button"
           onClick={() => { if (mode === 'day') setMode('month'); else if (mode === 'month') setMode('year'); }}
-          className={`text-xs font-semibold text-zinc-700 px-3 py-1.5 rounded-lg transition-colors hover:bg-zinc-200 ${mode === 'year' ? 'cursor-default pointer-events-none' : 'cursor-pointer'}`}
+          className={`text-xs font-medium text-zinc-700 px-3 py-1.5 rounded-lg transition-colors hover:bg-zinc-200 ${mode === 'year' ? 'cursor-default pointer-events-none' : 'cursor-pointer'}`}
         >
           {mode === 'day' && `${monthNames[viewDate.getMonth()]} ${viewDate.getFullYear()}`}
           {mode === 'month' && viewDate.getFullYear()}
           {mode === 'year' && `${yearRangeStart} – ${yearRangeStart + 11}`}
         </button>
-        <button type="button" onClick={handleNext} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 transition">
+        <button type="button" onClick={handleNext} aria-label="Próximo período" className={cn('rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-200 transition', uiTheme.focus)}>
           <ChevronRight size={16} />
         </button>
       </div>
@@ -222,7 +237,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         <div>
           <div className="grid grid-cols-7 border-b border-zinc-100 px-2 pt-2 bg-zinc-50/50">
             {weekDays.map((day, index) => (
-              <div key={index} className="flex h-8 items-center justify-center text-[9px] font-semibold uppercase tracking-normal text-zinc-400">
+              <div key={index} className="flex h-8 items-center justify-center text-[9px] font-medium uppercase tracking-normal text-zinc-400">
                 {day}
               </div>
             ))}
@@ -239,9 +254,9 @@ export const DatePicker: React.FC<DatePickerProps> = ({
                   type="button"
                   disabled={disabledDate}
                   onClick={() => handleSelectDate(date)}
-                  title={isHoliday(date)?.name || (disabledDate ? 'Indisponível' : '')}
+                  title={isHoliday(date) ? 'Feriado nacional' : (disabledDate ? 'Indisponível' : '')}
                   className={[
-                    'flex h-8 items-center justify-center rounded-lg text-xs font-bold transition relative',
+                    'flex h-8 items-center justify-center rounded-lg text-xs font-medium transition relative',
                     !isCurrentMonth ? 'text-zinc-300' : 'text-zinc-700',
                     isSelected ? 'bg-blue-500 text-white shadow-sm hover:bg-blue-600' : '',
                     isToday && !isSelected ? 'bg-blue-50 border border-blue-200 text-blue-700' : '',
@@ -264,7 +279,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         <div className="grid grid-cols-3 gap-2 p-3 h-[260px]">
           {monthNames.map((m, i) => (
             <button key={i} type="button" onClick={() => { setViewDate(new Date(viewDate.getFullYear(), i, 1)); setMode('day'); }}
-              className={`rounded-lg flex items-center justify-center font-bold text-xs transition-colors border ${viewDate.getMonth() === i ? 'bg-blue-500 text-white border-transparent' : 'bg-zinc-50 text-zinc-700 hover:bg-blue-50 border-zinc-200'}`}>
+              className={`rounded-lg flex items-center justify-center font-medium text-xs transition-colors border ${viewDate.getMonth() === i ? 'bg-blue-500 text-white border-transparent' : 'bg-zinc-50 text-zinc-700 hover:bg-blue-50 border-zinc-200'}`}>
               {m.slice(0, 3).toUpperCase()}
             </button>
           ))}
@@ -277,7 +292,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             const y = yearRangeStart + i;
             return (
               <button key={y} type="button" onClick={() => { setViewDate(new Date(y, viewDate.getMonth(), 1)); setMode('month'); }}
-                className={`rounded-lg flex items-center justify-center font-bold text-xs transition-colors border ${viewDate.getFullYear() === y ? 'bg-blue-500 text-white border-transparent' : 'bg-zinc-50 text-zinc-700 hover:bg-blue-50 border-zinc-200'}`}>
+                className={`rounded-lg flex items-center justify-center font-medium text-xs transition-colors border ${viewDate.getFullYear() === y ? 'bg-blue-500 text-white border-transparent' : 'bg-zinc-50 text-zinc-700 hover:bg-blue-50 border-zinc-200'}`}>
                 {y}
               </button>
             );
@@ -287,11 +302,11 @@ export const DatePicker: React.FC<DatePickerProps> = ({
 
       <div className="flex items-center justify-between border-t border-zinc-100 px-3 py-2 bg-zinc-50/80">
         <button type="button" onClick={() => { const now = new Date(); setViewDate(now); if (mode === 'day') handleSelectDate(now); else setMode('day'); }}
-          className="rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-normal text-zinc-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
+          className="rounded-lg px-3 py-1.5 text-[10px] font-medium uppercase tracking-normal text-zinc-500 hover:text-blue-600 hover:bg-blue-50 transition-colors">
           Hoje
         </button>
         <button type="button" onClick={() => { onChange(null); setIsOpen(false); }}
-          className="rounded-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-normal text-zinc-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+          className="rounded-lg px-3 py-1.5 text-[10px] font-medium uppercase tracking-normal text-zinc-500 hover:text-red-600 hover:bg-red-50 transition-colors">
           Limpar
         </button>
       </div>
@@ -300,13 +315,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   ) : null;
 
   const inputStyles = variant === 'ghost' 
-    ? "flex h-[34px] w-full items-center justify-center bg-transparent px-3 text-xs font-semibold text-zinc-800 transition-all placeholder:text-zinc-400 placeholder:font-normal focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:bg-transparent"
-    : "flex h-[34px] w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 pr-10 text-xs font-bold text-zinc-800 shadow-sm transition-all placeholder:text-zinc-400 placeholder:font-normal hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400";
+    ? "flex h-[34px] w-full items-center justify-center bg-transparent px-3 text-xs font-medium text-zinc-800 transition-all placeholder:text-zinc-400 placeholder:font-normal focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:bg-transparent"
+    : "flex h-[34px] w-full items-center gap-2 rounded-lg border border-zinc-200 bg-white px-2.5 pr-10 text-xs font-medium text-zinc-800 shadow-sm transition-all placeholder:text-zinc-400 placeholder:font-normal hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 disabled:cursor-not-allowed disabled:bg-zinc-100 disabled:text-zinc-400";
 
   return (
     <div ref={containerRef} className={cn("flex flex-col gap-1.5", variant !== 'ghost' ? className : '')}>
       {label && (
-        <label className="ds-label">
+        <label className="ds-label" htmlFor={inputId}>
           {label}
         </label>
       )}
@@ -317,11 +332,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         ) : (
           <>
             <input
+              id={inputId}
               type="text"
               disabled={disabled}
               placeholder={placeholder}
               value={inputValue}
               onChange={handleInputChange}
+              onKeyDown={event => { if (event.key === 'ArrowDown' && !disabled) { event.preventDefault(); setIsOpen(true); } }}
               onBlur={() => { if (inputValue.length > 0 && inputValue.length < 10) setInputValue(value ? formatDisplayDate(value) : ''); }}
               className={cn(inputStyles, variant === 'ghost' ? className : '')}
             />
@@ -333,7 +350,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
       </div>
 
       {error && (
-        <p className="text-[11px] font-semibold text-red-500">{error}</p>
+        <p className="text-[11px] font-medium text-red-500">{error}</p>
       )}
       {hint && !error && (
         <p className="text-[11px] text-zinc-400">{hint}</p>

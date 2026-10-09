@@ -1,5 +1,6 @@
 import React from "react";
 import { cn } from "@/src/lib/utils";
+import { uiTheme } from './theme';
 
 interface PanelCardProps extends React.HTMLAttributes<HTMLElement> {
   title?: string;
@@ -30,7 +31,8 @@ export function PanelCard({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-lg border border-slate-200 bg-white",
+        "overflow-hidden",
+        uiTheme.surface,
         className
       )}
       {...props}
@@ -57,7 +59,7 @@ export function PanelCard({
             {(title || description) && (
               <div className="min-w-0">
                 {title && (
-                  <h3 className="text-sm font-bold tracking-tight text-slate-900">{title}</h3>
+                  <h3 className="text-sm font-medium tracking-tight text-slate-900">{title}</h3>
                 )}
                 {description && (
                   <p className="mt-0.5 text-xs leading-relaxed text-slate-500">{description}</p>

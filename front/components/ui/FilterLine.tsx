@@ -1,6 +1,7 @@
 import React from 'react';
 import { Search, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { DatePicker } from './DatePicker';
+import { uiTheme } from './theme';
 
 const cx = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(' ');
@@ -70,7 +71,7 @@ interface FilterLineDateRangeProps {
 }
 
 export const FilterLine: React.FC<FilterLineProps> = ({ children, className = '', ...props }) => (
-  <div className={cx('w-full rounded-lg border border-slate-200 bg-white p-2.5', className)} {...props}>
+  <div className={cx('w-full p-2.5', uiTheme.surface, className)} {...props}>
     <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
       {children}
     </div>
@@ -133,7 +134,7 @@ export function FilterLineSegmented<T extends string | number = string>({
             type="button"
             onClick={() => onChange(option.value)}
             className={cx(
-              'inline-flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-lg font-bold transition-all',
+              'inline-flex flex-1 sm:flex-initial items-center justify-center gap-2 rounded-lg font-medium transition-all',
               size === 'sm' ? 'px-2 py-1.5 text-[10px]' : 'px-2.5 py-1.5 text-xs',
               active ? 'bg-white text-blue-600 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
             )}
@@ -189,7 +190,7 @@ export const FilterLineSearch: React.FC<FilterLineSearchProps> = ({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full bg-transparent text-xs font-bold text-zinc-800 outline-none placeholder:text-zinc-400 placeholder:font-normal"
+      className="w-full bg-transparent text-xs font-medium text-zinc-800 outline-none placeholder:text-zinc-400 placeholder:font-normal"
     />
   </div>
 );
@@ -199,13 +200,13 @@ export const FilterLineDateRange: React.FC<FilterLineDateRangeProps> = ({
 }) => (
   <div className={cx('flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:gap-3', className)}>
     <div className="flex items-center gap-2">
-      <span className="text-[10px] font-semibold uppercase tracking-normal text-zinc-400">{fromLabel}</span>
+      <span className="text-[10px] font-medium uppercase tracking-normal text-zinc-400">{fromLabel}</span>
       <div className="min-w-[140px]">
         <DatePicker value={from} onChange={onFromChange} />
       </div>
     </div>
     <div className="flex items-center gap-2">
-      <span className="text-[10px] font-semibold uppercase tracking-normal text-zinc-400">{toLabel}</span>
+      <span className="text-[10px] font-medium uppercase tracking-normal text-zinc-400">{toLabel}</span>
       <div className="min-w-[140px]">
         <DatePicker value={to} onChange={onToChange} />
       </div>

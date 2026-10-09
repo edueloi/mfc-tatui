@@ -3,6 +3,7 @@ import { CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Pagination } from './Pagination';
+import { uiTheme } from './theme';
 
 export interface Column<T> {
   header: ReactNode | string;
@@ -55,7 +56,7 @@ export interface GridTableProps<T> {
 function SortIndicator({ active, order }: { active: boolean; order: 'asc' | 'desc' }) {
   if (!active) return <span className="inline-block ml-1.5 w-1.5 h-1.5 rounded-full bg-zinc-300 align-middle" />;
   return (
-    <span className="inline-block ml-1.5 align-middle text-blue-500 leading-none font-semibold text-xs">
+    <span className="inline-block ml-1.5 align-middle text-blue-500 leading-none font-medium text-xs">
       {order === 'asc' ? '↑' : '↓'}
     </span>
   );
@@ -195,7 +196,7 @@ export function GridTable<T>({
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3 px-1">
-          <div className="font-semibold text-sm text-zinc-900 pr-4 break-words">
+          <div className="font-medium text-sm text-zinc-900 pr-4 break-words">
             {titleCol?.render ? titleCol.render(row) : titleCol?.accessor ? String(row[titleCol.accessor] ?? '') : ''}
           </div>
         </div>
@@ -204,8 +205,8 @@ export function GridTable<T>({
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-3 border-t border-zinc-100">
             {detailsCols.map((col, idx) => (
               <div key={idx} className="flex flex-col min-w-0">
-                <span className="text-[9px] font-semibold uppercase tracking-normal text-zinc-400 mb-0.5 truncate">{col.header}</span>
-                <div className="text-xs font-semibold text-zinc-700">
+                <span className="text-[9px] font-medium uppercase tracking-normal text-zinc-400 mb-0.5 truncate">{col.header}</span>
+                <div className="text-xs font-medium text-zinc-700">
                   {col.render ? col.render(row) : col.accessor ? String(row[col.accessor] ?? '') : ''}
                 </div>
               </div>
@@ -215,7 +216,7 @@ export function GridTable<T>({
 
         {actionCol && (
           <div className="pt-3 mt-1 border-t border-zinc-100">
-            <span className="text-[9px] font-semibold uppercase tracking-normal text-zinc-400 mb-2 block">Ações</span>
+            <span className="text-[9px] font-medium uppercase tracking-normal text-zinc-400 mb-2 block">Ações</span>
             <div className="flex flex-wrap gap-2">
               {actionCol.render ? actionCol.render(row) : null}
             </div>
@@ -229,13 +230,13 @@ export function GridTable<T>({
     <div className="w-full min-w-0 max-w-full">
       {/* ─── DESKTOP TABLE VIEW ─── */}
       <div className={cn(
-        !noDesktopCard && 'bg-white sm:border border-zinc-200 sm:rounded-lg sm:shadow-sm',
+        !noDesktopCard && uiTheme.table.surface,
         'overflow-hidden',
         !disableMobileCards && ({ sm: 'hidden sm:block', lg: 'hidden lg:block', xl: 'hidden xl:block' }[mobileBreakpoint]),
       )}>
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse" style={{ minWidth: tableMinWidth ?? (disableMobileCards ? 0 : 520) }}>
-            <thead className="bg-zinc-50 border-b border-zinc-200">
+            <thead className={uiTheme.table.header}>
               <tr>
                 {isSelectable && (
                   <th className="px-3 py-2.5 w-10 text-center shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -252,7 +253,7 @@ export function GridTable<T>({
                       key={idx}
                       onClick={isSortable ? () => onSort!(col.sortKey!) : undefined}
                       className={cn(
-                        'px-3.5 py-2.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-normal whitespace-nowrap',
+                        'px-3.5 py-2.5 text-[10px] font-medium text-zinc-400 uppercase tracking-normal whitespace-nowrap',
                         isSortable && 'cursor-pointer select-none hover:text-blue-600 transition-colors',
                         isActive && 'text-blue-600',
                         col.headerClassName,
@@ -280,7 +281,7 @@ export function GridTable<T>({
                 ))
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="py-6 bg-white text-center text-xs font-bold text-zinc-400 uppercase tracking-normal">
+                  <td colSpan={columns.length + (isSelectable ? 1 : 0)} className="py-6 bg-white text-center text-xs font-medium text-zinc-400 uppercase tracking-normal">
                     {emptyMessage}
                   </td>
                 </tr>
@@ -333,7 +334,7 @@ export function GridTable<T>({
               </div>
             ))
           ) : data.length === 0 ? (
-            <div className="py-6 bg-white border border-zinc-200 border-dashed rounded-lg text-center text-xs font-bold text-zinc-400 uppercase tracking-normal">
+            <div className="py-6 bg-white border border-zinc-200 border-dashed rounded-lg text-center text-xs font-medium text-zinc-400 uppercase tracking-normal">
               {emptyMessage}
             </div>
           ) : (

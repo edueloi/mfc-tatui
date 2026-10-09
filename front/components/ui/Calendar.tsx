@@ -54,17 +54,18 @@ export const Calendar: React.FC<CalendarProps> = ({
   today.setHours(0, 0, 0, 0);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white p-3">
+    <div className="ui-calendar min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
+          <p className="text-[10px] font-medium uppercase tracking-normal text-zinc-400">
             {mode === 'block' ? 'Dias bloqueados' : 'Selecionar data'}
           </p>
-          <h3 className="text-sm font-semibold text-zinc-800">{monthLabel}</h3>
+          <h3 className="text-sm font-medium text-zinc-800">{monthLabel}</h3>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handlePrevMonth}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-300 hover:bg-zinc-50"
             aria-label="Mês anterior"
@@ -72,6 +73,7 @@ export const Calendar: React.FC<CalendarProps> = ({
             <ChevronLeft size={16} />
           </button>
           <button
+            type="button"
             onClick={handleNextMonth}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-all hover:border-zinc-300 hover:bg-zinc-50"
             aria-label="Próximo mês"
@@ -81,7 +83,7 @@ export const Calendar: React.FC<CalendarProps> = ({
         </div>
       </div>
 
-      <div className="mb-3 grid grid-cols-7 gap-1 rounded-lg bg-zinc-100 p-1 text-center text-[10px] font-semibold uppercase tracking-normal text-zinc-400">
+      <div className="mb-3 grid grid-cols-7 gap-1 rounded-lg bg-zinc-100 p-1 text-center text-[10px] font-medium uppercase tracking-normal text-zinc-400">
         {WEEK_DAYS.map((day, i) => (
           <div key={i} className="flex h-8 items-center justify-center rounded-lg">
             {day}
@@ -104,7 +106,7 @@ export const Calendar: React.FC<CalendarProps> = ({
           const isPast = date < today;
           const isToday = date.getTime() === today.getTime();
 
-          let className = 'h-8 rounded-md text-sm font-bold transition-all ';
+          let className = 'h-8 rounded-md text-sm font-medium transition-all ';
 
           if (isPast && !isClosed) {
             className += 'text-zinc-300 cursor-default';
@@ -141,7 +143,7 @@ export const Calendar: React.FC<CalendarProps> = ({
       </div>
 
       {/* Legenda */}
-      <div className="mt-4 flex items-center justify-between gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-normal text-zinc-400">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-zinc-100 px-3 py-2 text-[10px] font-medium uppercase tracking-normal text-zinc-400">
         <span>Branco: livre</span>
         {closedDates.length > 0 && (
           <span className="flex items-center gap-1">

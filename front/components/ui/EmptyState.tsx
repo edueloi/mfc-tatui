@@ -40,7 +40,7 @@ export function EmptyState({
       )}
 
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-zinc-900">{title}</p>
+        <p className="text-sm font-medium text-zinc-900">{title}</p>
         {description && <p className="text-xs leading-relaxed text-zinc-500">{description}</p>}
       </div>
 

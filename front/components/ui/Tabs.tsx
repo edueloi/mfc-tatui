@@ -20,7 +20,7 @@ export function Tabs<T extends string>({ items, value, onChange, label, children
     <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto border-b border-slate-200">
       {items.map((tab, index) => <button key={tab.id} id={`${id}-${tab.id}`} role="tab" type="button" aria-selected={value === tab.id} aria-controls={`${id}-panel`} tabIndex={value === tab.id ? 0 : -1}
         onClick={() => onChange(tab.id)} onKeyDown={event => selectByKey(event, index)}
-        className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors focus-visible:outline-blue-500 ${value === tab.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+        className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors focus-visible:outline-blue-500 ${value === tab.id ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
         {tab.icon && <tab.icon size={14} />}{tab.label}
       </button>)}
     </div>
