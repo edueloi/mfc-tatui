@@ -2,22 +2,28 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  BookOpen, Plus, ArrowLeft, ArrowRight, Download, DollarSign, TrendingUp, TrendingDown, Wallet, Pencil, Trash2, Loader2, ListChecks, Table2, BarChart3,
+  BookOpen, Plus, ArrowLeft, ArrowRight, Download, DollarSign, TrendingUp, TrendingDown, Wallet, Pencil, Trash2, Loader2, ListChecks, Table2, BarChart3, Settings2, Printer, Share2, Copy, Clock,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { api } from '../api';
 import { FinancialEntity } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, PanelCard, Tabs, Button, IconButton, Badge, Select, EmptyState, ConfirmModal, GridTable, usePagination,
-  FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch, FilterLineSegmented,
+  FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch, FilterLineSegmented, Modal, ModalFooter,
 } from '../components/ui';
 import { LedgerBookModal } from '../components/LedgerBookModal';
 import { LedgerEntryModal } from '../components/LedgerEntryModal';
+import { LedgerPreferencesModal } from '../components/LedgerPreferencesModal';
+import { LedgerCostCentersModal } from '../components/LedgerCostCentersModal';
+import { LedgerTeams } from '../components/LedgerTeams';
+import { useLedgerPreferences, LedgerPreferences } from '../src/hooks/useLedgerPreferences';
+import { printLedger } from '../utils/ledgerExport';
+import { localDateToday } from '../utils/paymentAccounting';
 import { usePermission } from '../src/hooks/usePermission';
 import { useUrlTab } from '../src/hooks/useUrlTab';
 import { dateLabel } from '../utils/dates';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
-import { LEDGER_BASE, LedgerEntry, balanceSheet, bookPath, findBook, monthNames, monthlyTotals, shortMonths, summarize } from '../utils/ledger';
+import { LEDGER_BASE, LedgerEntry, balanceSheet, bookPath, findBook, monthNames, monthlyTotals, shortMonths, summarize, pendingTotals, isSettled, isOverdue, entryStatusLabel, csvCell } from '../utils/ledger';
 
 const money = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 const number = (value: number) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -36,6 +42,11 @@ const GeneralLedger: React.FC = () => {
   const [deleteBook, setDeleteBook] = useState<FinancialEntity | null>(null);
   const [deletingBook, setDeletingBook] = useState(false);
   const userId = currentUserId();
+  const { preferences, savePreferences } = useLedgerPreferences(userId);
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [showCenters, setShowCenters] = useState(false);
+  const [overviewTab, setOverviewTab] = useState('livros');
+  const canCreateBook = usePermission('livro-caixa', 'create');
 
   useEffect(() => {
     let cancelled = false;
@@ -84,13 +95,19 @@ const GeneralLedger: React.FC = () => {
   return (
     <PageWrapper>
       <div className="space-y-4">
+        {!book && <SectionTitle title="Livro Caixa" icon={BookOpen} description="Movimentações e mensalidades das equipes, organizadas por exercício." action={<div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<Table2 size={14} />} onClick={() => setShowCenters(true)}>Centros de custo</Button><Button variant="outline" size="sm" iconLeft={<Settings2 size={14} />} onClick={() => setShowPreferences(true)}>Preferências</Button>{canCreateBook && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openBookForm(null)}>Novo livro</Button>}</div>} />}
         {book
-          ? <BookDetail book={book} entries={entries.filter(entry => entry.entityId === book.id)} userId={userId}
-              onBack={() => navigate(LEDGER_BASE)} onEdit={() => openBookForm(book)} onDelete={() => setDeleteBook(book)}
-              onCreated={created => setEntries(prev => [...created, ...prev])} onRemoved={id => setEntries(prev => prev.filter(entry => entry.id !== id))} />
-          : <BooksList books={books} entries={entries} onNew={() => openBookForm(null)} onOpen={target => navigate(bookPath(target, books))} onEdit={openBookForm} onDelete={setDeleteBook} />}
+          ? <BookDetail key={book.id} book={book} entries={entries.filter(entry => entry.entityId === book.id)} userId={userId} preferences={preferences} onPreferences={() => setShowPreferences(true)}
+              onBack={() => navigate(LEDGER_BASE)} onEdit={() => openBookForm(book)} onDelete={() => setDeleteBook(book)} onPaymentsChanged={() => setRetry(value => value + 1)} onCenters={() => setShowCenters(true)}
+              onCreated={created => setEntries(prev => [...created, ...prev.filter(entry => !created.some(item => item.id === entry.id))])} onRemoved={id => setEntries(prev => prev.filter(entry => entry.id !== id))} />
+          : <Tabs value={overviewTab} onChange={setOverviewTab} label="Livro Caixa e equipes" items={[{ id: 'livros', label: 'Livros por ano', icon: BookOpen }, { id: 'equipes', label: 'Equipes base', icon: Wallet }]}>
+              {overviewTab === 'livros' ? <BooksList preferences={preferences} onPreferences={() => setShowPreferences(true)} books={books} entries={entries} onNew={() => openBookForm(null)} onOpen={target => navigate(bookPath(target, books))} onEdit={openBookForm} onDelete={setDeleteBook} />
+                : <LedgerTeams userId={userId} onChanged={() => setRetry(value => value + 1)} />}
+            </Tabs>}
       </div>
 
+      <LedgerCostCentersModal isOpen={showCenters} onClose={() => setShowCenters(false)} onChanged={() => setRetry(n => n + 1)} />
+      <LedgerPreferencesModal isOpen={showPreferences} onClose={() => setShowPreferences(false)} value={preferences} onSave={savePreferences} years={[...new Set(books.map(item => item.year))].sort((a, b) => b - a)} />
       <LedgerBookModal isOpen={showBookModal} book={editingBook} entryCount={editingBook ? entries.filter(entry => entry.entityId === editingBook.id).length : 0} userId={userId}
         onClose={() => setShowBookModal(false)} onSaved={handleBookSaved} />
       <ConfirmModal isOpen={!!deleteBook} onClose={() => setDeleteBook(null)} onConfirm={removeBook} loading={deletingBook} title="Excluir livro caixa?"
@@ -101,26 +118,26 @@ const GeneralLedger: React.FC = () => {
 
 /* ───────────────────────────── Lista de livros ───────────────────────────── */
 
-const BooksList: React.FC<{ books: FinancialEntity[]; entries: LedgerEntry[]; onNew: () => void; onOpen: (book: FinancialEntity) => void; onEdit: (book: FinancialEntity) => void; onDelete: (book: FinancialEntity) => void }> = ({ books, entries, onNew, onOpen, onEdit, onDelete }) => {
+const BooksList: React.FC<{ preferences: LedgerPreferences; onPreferences: () => void; books: FinancialEntity[]; entries: LedgerEntry[]; onNew: () => void; onOpen: (book: FinancialEntity) => void; onEdit: (book: FinancialEntity) => void; onDelete: (book: FinancialEntity) => void }> = ({ preferences, onPreferences, books, entries, onNew, onOpen, onEdit, onDelete }) => {
   const canCreate = usePermission('livro-caixa', 'create');
   const canEdit = usePermission('livro-caixa', 'edit');
   const canDelete = usePermission('livro-caixa', 'delete');
   const [search, setSearch] = useState('');
-  const [year, setYear] = useState('all');
+  const resolveYear = () => preferences.year === 'current' ? String(new Date().getFullYear()) : preferences.year;
+  const [year, setYear] = useState(resolveYear);
+  useEffect(() => setYear(resolveYear()), [preferences.year]);
   const query = normalizeDirectoryText(search);
 
   const rows = useMemo(() => books.map(book => { const own = entries.filter(entry => entry.entityId === book.id); return { book, count: own.length, ...summarize(own, book.initialBalance) }; }), [books, entries]);
   const filtered = rows.filter(row => (!query || normalizeDirectoryText(`${row.book.name} ${row.book.year}`).includes(query)) && (year === 'all' || String(row.book.year) === year)).sort((a, b) => b.book.year - a.book.year || a.book.name.localeCompare(b.book.name, 'pt-BR'));
-  const yearOptions = [{ value: 'all', label: 'Todos os anos' }, ...Array.from(new Set(books.map(book => book.year))).sort((a, b) => b - a).map(value => ({ value: String(value), label: String(value) }))];
-  const totalBalance = rows.reduce((sum, row) => sum + row.balance, 0);
-  const totalEntries = rows.reduce((sum, row) => sum + row.count, 0);
+  const yearOptions = [{ value: 'all', label: 'Todos os anos' }, ...Array.from(new Set([new Date().getFullYear(), ...books.map(book => book.year)])).sort((a, b) => b - a).map(value => ({ value: String(value), label: String(value) }))];
+  const totalBalance = filtered.reduce((sum, row) => sum + row.balance, 0);
+  const totalEntries = filtered.reduce((sum, row) => sum + row.count, 0);
 
-  return <>
-    <SectionTitle title="Livro Caixa" icon={BookOpen} description="Entradas e saídas de cada exercício."
-      action={canCreate ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={onNew}>Novo livro</Button> : undefined} />
+  return <div className="space-y-4">
     <StatGrid cols={3}>
-      <StatCard title="Livros" value={books.length} icon={BookOpen} color="info" />
-      <StatCard title="Saldo atual" value={money(totalBalance)} icon={Wallet} color={totalBalance >= 0 ? 'success' : 'danger'} description="Soma de todos os livros" />
+      <StatCard title="Livros" value={filtered.length} icon={BookOpen} color="info" />
+      <StatCard title="Saldo atual" value={money(totalBalance)} icon={Wallet} color={totalBalance >= 0 ? 'success' : 'danger'} description="Livros do filtro · somente valores realizados" />
       <StatCard title="Lançamentos" value={totalEntries} icon={ListChecks} color="purple" />
     </StatGrid>
     <FilterLine>
@@ -132,7 +149,7 @@ const BooksList: React.FC<{ books: FinancialEntity[]; entries: LedgerEntry[]; on
     </FilterLine>
 
     {filtered.length === 0
-      ? <ContentCard><EmptyState icon={BookOpen} title="Nenhum livro encontrado" description={search || year !== 'all' ? 'Ajuste a busca ou o ano.' : 'Crie o livro caixa do exercício para começar a lançar.'} action={!search && year === 'all' && canCreate ? <Button size="sm" onClick={onNew}>Novo livro</Button> : undefined} /></ContentCard>
+      ? <ContentCard><EmptyState icon={BookOpen} title="Nenhum livro encontrado" description="Crie um livro ou selecione outro ano para consultar o histórico." action={<div className="flex gap-2">{canCreate && <Button size="sm" onClick={onNew}>Novo livro</Button>}<Button size="sm" variant="outline" onClick={() => { setYear('all'); setSearch(''); }}>Ver todos os anos</Button></div>} /></ContentCard>
       : <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{filtered.map(({ book, count, balance, income, expenses }) =>
         <ContentCard key={book.id} padding="none" className="group flex h-full flex-col overflow-hidden transition-all hover:border-blue-200">
           <div className="flex flex-1 flex-col gap-3 p-3">
@@ -154,25 +171,35 @@ const BooksList: React.FC<{ books: FinancialEntity[]; entries: LedgerEntry[]; on
           <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
             <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={() => onOpen(book)}>Abrir livro</Button>
             {canEdit && <IconButton variant="ghost" size="xs" aria-label={`Editar ${book.name}`} className="h-8 w-8" onClick={() => onEdit(book)}><Pencil size={14} /></IconButton>}
-            {canDelete && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${book.name}`} className="h-8 w-8" onClick={() => onDelete(book)}><Trash2 size={14} className="text-red-500" /></IconButton>}
+            {canDelete && !book.id.startsWith('mfc-team-payments-') && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${book.name}`} className="h-8 w-8" onClick={() => onDelete(book)}><Trash2 size={14} className="text-red-500" /></IconButton>}
           </div>
         </ContentCard>)}</div>}
-  </>;
+  </div>;
 };
 
 /* ───────────────────────────── Livro aberto ───────────────────────────── */
 
-const bookTabs = [{ id: 'lancamentos', label: 'Lançamentos', icon: ListChecks }, { id: 'balancete', label: 'Balancete', icon: Table2 }, { id: 'grafico', label: 'Gráfico', icon: BarChart3 }] as const;
+const bookTabs = [{ id: 'lancamentos', label: 'Lançamentos', icon: ListChecks }, { id: 'pagar', label: 'A pagar', icon: TrendingDown }, { id: 'receber', label: 'A receber', icon: TrendingUp }, { id: 'balancete', label: 'Balancete', icon: Table2 }, { id: 'grafico', label: 'Gráfico', icon: BarChart3 }, { id: 'equipes', label: 'Equipes base', icon: Wallet }] as const;
 const bookTabIds = bookTabs.map(tab => tab.id);
 
-const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; userId?: string; onBack: () => void; onEdit: () => void; onDelete: () => void; onCreated: (entries: LedgerEntry[]) => void; onRemoved: (id: string) => void }> = ({ book, entries, userId, onBack, onEdit, onDelete, onCreated, onRemoved }) => {
+const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => void; preferences: LedgerPreferences; onPreferences: () => void; book: FinancialEntity; entries: LedgerEntry[]; userId?: string; onBack: () => void; onEdit: () => void; onDelete: () => void; onCreated: (entries: LedgerEntry[]) => void; onRemoved: (id: string) => void }> = ({ preferences, onPreferences, book, entries, userId, onBack, onEdit, onDelete, onCreated, onRemoved, onPaymentsChanged, onCenters }) => {
   const canCreate = usePermission('livro-caixa', 'create');
   const canEdit = usePermission('livro-caixa', 'edit');
   const canDelete = usePermission('livro-caixa', 'delete');
-  const [tab, setTab] = useUrlTab(bookTabIds, 'lancamentos');
+  const [tab, setTab] = useUrlTab(bookTabIds, book.id.startsWith('mfc-team-payments-') ? 'equipes' : preferences.tab);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [monthFilter, setMonthFilter] = useState('all');
+  const [monthFilter, setMonthFilter] = useState(preferences.month);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [kindFilter, setKindFilter] = useState('all');
+  const [centerFilter, setCenterFilter] = useState('');
+  const [accountFilter, setAccountFilter] = useState('');
+  const [showExport, setShowExport] = useState(false);
+  const [exportScope, setExportScope] = useState<'all' | 'filtered'>('all');
+  const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null);
+  const [settleEntry, setSettleEntry] = useState(false);
+  const [showShare, setShowShare] = useState(false);
+  const today = localDateToday();
   const [showEntry, setShowEntry] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<LedgerEntry | null>(null);
   const [removing, setRemoving] = useState(false);
@@ -180,13 +207,25 @@ const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; user
   const totals = useMemo(() => summarize(entries, book.initialBalance), [entries, book.initialBalance]);
   const monthly = useMemo(() => monthlyTotals(entries), [entries]);
   const sheet = useMemo(() => balanceSheet(entries), [entries]);
+  const pending = useMemo(() => pendingTotals(entries, today), [entries, today]);
+  const summary = `${book.name} — ${book.year}\nSaldo inicial: ${money(Number(book.initialBalance) || 0)}\nEntradas recebidas: ${money(totals.income)}\nSaídas pagas: ${money(totals.expenses)}\nSaldo atual: ${money(totals.balance)}\nA receber: ${money(pending.receivable)}\nA pagar: ${money(pending.payable)}\nSaldo projetado: ${money(totals.balance + pending.receivable - pending.payable)}\nContas em atraso: ${pending.overdueCount}\nResumo em ${dateLabel(today)}.`;
+  const openEntry = (entry: LedgerEntry | null, settle = false) => { setEditingEntry(entry); setSettleEntry(settle); setShowEntry(true); };
+  const accountTab = tab === 'pagar' || tab === 'receber';
 
   const query = normalizeDirectoryText(search);
   const filtered = useMemo(() => [...entries]
-    .filter(entry => (typeFilter === 'all' || entry.type === typeFilter) && (monthFilter === 'all' || Number(entry.date.slice(5, 7)) === Number(monthFilter)) && (!query || normalizeDirectoryText(`${entry.description} ${entry.category || ''}`).includes(query)))
-    .sort((a, b) => b.date.localeCompare(a.date)), [entries, typeFilter, monthFilter, query]);
-  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(filtered, 15);
-  const hasFilter = !!query || typeFilter !== 'all' || monthFilter !== 'all';
+    .filter(entry => (!accountTab || (entry.status === 'PENDING' && entry.type === (tab === 'pagar' ? 'OUT' : 'IN')))
+      && (accountTab || typeFilter === 'all' || entry.type === typeFilter)
+      && (monthFilter === 'all' || Number((accountTab ? entry.dueDate || entry.date : entry.date).slice(5, 7)) === Number(monthFilter))
+      && (statusFilter === 'all' || (statusFilter === 'overdue' ? isOverdue(entry, today) : (entry.status || 'SETTLED') === statusFilter))
+      && (kindFilter === 'all' || (entry.valueKind || 'VARIABLE') === kindFilter)
+      && (!centerFilter || entry.costCenter === centerFilter) && (!accountFilter || entry.financialAccount === accountFilter)
+      && (!query || normalizeDirectoryText(`${entry.description} ${entry.category || ''} ${entry.counterparty || ''} ${entry.notes || ''} ${entry.costCenter || ''} ${entry.analytic || ''} ${entry.financialAccount || ''}`).includes(query)))
+    .sort((a, b) => accountTab ? (a.dueDate || a.date).localeCompare(b.dueDate || b.date) : b.date.localeCompare(a.date)), [entries, typeFilter, monthFilter, query, accountTab, tab, statusFilter, kindFilter, today, centerFilter, accountFilter]);
+  const { page, pageSize, paginatedData, setPage, setPageSize } = usePagination(filtered, preferences.pageSize);
+  useEffect(() => { setMonthFilter(preferences.month); setPageSize(preferences.pageSize); }, [preferences.month, preferences.pageSize]);
+  const hasFilter = !!query || typeFilter !== 'all' || monthFilter !== 'all' || statusFilter !== 'all' || kindFilter !== 'all' || !!centerFilter || !!accountFilter;
+  const changeTab = (next: typeof bookTabs[number]['id']) => { setTab(next); setTypeFilter('all'); setStatusFilter('all'); setPage(1); };
 
   const remove = async () => {
     if (!removeTarget || removing) return;
@@ -197,7 +236,7 @@ const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; user
   };
 
   const exportCsv = () => {
-    const cell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const cell = csvCell;
     const rows: (string | number)[][] = [['Conta', ...monthNames, 'Total'], ['ENTRADAS']];
     sheet.income.forEach(row => rows.push([row.category, ...row.months.map(number), number(row.total)]));
     rows.push(['Total de entradas', ...monthly.income.map(number), number(totals.income)], ['SAÍDAS']);
@@ -209,24 +248,48 @@ const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; user
     document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
   };
 
+  const [exporting, setExporting] = useState(false);
+  const exportWorkbook = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const filtered = exportScope === 'filtered';
+      const { blob, filename } = await api.exportLedgerWorkbook(book.id, exportScope, filtered ? { tab, type: typeFilter, month: monthFilter, status: statusFilter, kind: kindFilter, search, costCenter: centerFilter, financialAccount: accountFilter } : {});
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob); link.download = filename;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      toast.success(filtered ? 'Planilha gerada com os filtros da tela.' : 'Planilha completa do livro gerada.');
+      setShowExport(false);
+    } catch (err) { toast.error(err instanceof Error ? err.message : 'Não foi possível gerar a planilha.'); }
+    finally { setExporting(false); }
+  };
+
   let running = Number(book.initialBalance) || 0;
   const chart = shortMonths.map((label, index) => ({ label, Entradas: monthly.income[index], Saídas: monthly.expenses[index] }));
   const columns = [
     { header: 'Data', render: (entry: LedgerEntry) => <span className="text-xs whitespace-nowrap text-slate-700">{dateLabel(entry.date)}</span> },
     { header: 'Descrição', render: (entry: LedgerEntry) => <div className="max-w-md min-w-0"><p className="text-xs text-slate-800 break-words">{entry.description || entry.category || 'Sem descrição'}</p>{entry.description && entry.category && <p className="mt-0.5 text-[11px] text-slate-500">{entry.category}</p>}</div> },
     { header: 'Tipo', render: (entry: LedgerEntry) => <Badge size="sm" dot color={entry.type === 'IN' ? 'success' : 'danger'}>{entry.type === 'IN' ? 'Entrada' : 'Saída'}</Badge> },
+    { header: 'Centro / conta', render: (entry: LedgerEntry) => <div className="text-xs text-slate-600">{entry.costCenter || 'Sem centro'}<p className="text-[11px] text-slate-500">{entry.financialAccount || 'Sem conta financeira'}{entry.analytic ? ` · ${entry.analytic}` : ''}</p></div> },
+    { header: 'Situação / vencimento', render: (entry: LedgerEntry) => <div className="space-y-1"><Badge size="sm" color={isOverdue(entry, today) ? 'danger' : isSettled(entry) ? 'success' : 'default'}>{entryStatusLabel(entry, today)}</Badge><p className="text-[11px] text-slate-500">{dateLabel(entry.dueDate || entry.date)}</p></div> },
+    { header: 'Classificação', render: (entry: LedgerEntry) => <div className="text-xs text-slate-600">{entry.valueKind === 'FIXED' ? 'Fixo' : 'Variável'}<p className="text-[11px] text-slate-500">{entry.counterparty}</p></div> },
     { header: 'Valor', render: (entry: LedgerEntry) => <span className={`text-xs font-semibold tabular-nums whitespace-nowrap ${entry.type === 'IN' ? 'text-emerald-700' : 'text-red-600'}`}>{entry.type === 'IN' ? '+' : '−'} {money(entry.amount)}</span> },
-    { header: '', render: (entry: LedgerEntry) => canDelete ? <IconButton variant="ghost" size="xs" aria-label={`Excluir lançamento de ${money(entry.amount)}`} onClick={event => { event.stopPropagation(); setRemoveTarget(entry); }}><Trash2 size={14} className="text-red-500" /></IconButton> : null },
+    { header: 'Variação', render: (entry: LedgerEntry) => <span className="text-xs tabular-nums">{isSettled(entry) ? money(entry.amount - (entry.expectedAmount ?? entry.amount)) : '—'}</span> },
+    { header: 'Ações', render: (entry: LedgerEntry) => <div className="flex items-center gap-1"><IconButton variant="ghost" size="xs" aria-label={canEdit && !entry.readOnly ? 'Editar lançamento' : 'Ver lançamento'} onClick={event => { event.stopPropagation(); openEntry(entry); }}><Pencil size={14} /></IconButton>{canEdit && entry.status === 'PENDING' && <Button variant="outline" size="xs" onClick={event => { event.stopPropagation(); openEntry(entry, true); }}>{entry.type === 'IN' ? 'Receber' : 'Pagar'}</Button>}{canDelete && !entry.readOnly && <IconButton variant="ghost" size="xs" aria-label={`Excluir lançamento de ${money(entry.amount)}`} onClick={event => { event.stopPropagation(); setRemoveTarget(entry); }}><Trash2 size={14} className="text-red-500" /></IconButton>}</div> },
   ];
 
   return <>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={onBack}>Voltar para o Livro Caixa</Button>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" iconLeft={<Download size={14} />} onClick={exportCsv}>Exportar CSV</Button>
+        <Button variant="outline" size="sm" iconLeft={<Table2 size={14} />} onClick={onCenters}>Centros de custo</Button>
+        <Button variant="outline" size="sm" iconLeft={<Settings2 size={14} />} onClick={onPreferences}>Preferências</Button>
+        <Button variant="outline" size="sm" iconLeft={<Share2 size={14} />} onClick={() => setShowShare(true)}>Comunicar resumo</Button>
+        <Button variant="outline" size="sm" iconLeft={<Download size={14} />} disabled={exporting} onClick={() => setShowExport(true)}>Exportar Excel / PDF</Button>
         {canEdit && <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={onEdit}>Editar livro</Button>}
-        {canDelete && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={onDelete}>Excluir livro</Button>}
-        {canCreate && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowEntry(true)}>Novo lançamento</Button>}
+        {canDelete && !book.id.startsWith('mfc-team-payments-') && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={onDelete}>Excluir livro</Button>}
+        {canCreate && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openEntry(null)}>{accountTab ? 'Nova conta' : 'Novo lançamento'}</Button>}
       </div>
     </div>
 
@@ -245,27 +308,39 @@ const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; user
       <StatCard title="Saldo atual" value={money(totals.balance)} icon={Wallet} color={totals.balance >= 0 ? 'purple' : 'danger'} />
     </StatGrid>
 
-    <Tabs<typeof bookTabs[number]['id']> items={bookTabs} value={tab} onChange={setTab} label="Seções do livro caixa">
-      {tab === 'lancamentos' && <div className="space-y-3">
+    <StatGrid cols={4}>
+      <StatCard title="A receber" value={money(pending.receivable)} icon={TrendingUp} color="success" description="Contas pendentes" />
+      <StatCard title="A pagar" value={money(pending.payable)} icon={TrendingDown} color="danger" description="Contas pendentes" />
+      <StatCard title="Em atraso" value={pending.overdueCount} icon={Clock} color="warning" description={money(pending.overdueAmount) + ' em contas vencidas'} />
+      <StatCard title="Saldo projetado" value={money(totals.balance + pending.receivable - pending.payable)} icon={Wallet} color="info" description="Saldo atual + a receber − a pagar" />
+    </StatGrid>
+    <Tabs<typeof bookTabs[number]['id']> items={bookTabs} value={tab} onChange={changeTab} label="Seções do livro caixa">
+      {(tab === 'lancamentos' || accountTab) && <div className="space-y-3">
+        <p className="text-xs text-slate-500">Clique em uma linha para {canEdit ? 'ver e editar' : 'consultar'} o lançamento. Variação = realizado − previsto. Os downloads respeitam os filtros; os indicadores mostram o exercício completo.</p>
         <FilterLine>
           <FilterLineSection grow>
             <FilterLineItem grow><FilterLineSearch aria-label="Buscar lançamento" value={search} onChange={setSearch} placeholder="Descrição ou conta…" /></FilterLineItem>
-            <FilterLineItem><FilterLineSegmented value={typeFilter} onChange={value => setTypeFilter(String(value))} options={[{ value: 'all', label: 'Todos' }, { value: 'IN', label: 'Entradas' }, { value: 'OUT', label: 'Saídas' }]} /></FilterLineItem>
+            {!accountTab && <FilterLineItem><FilterLineSegmented value={typeFilter} onChange={value => setTypeFilter(String(value))} options={[{ value: 'all', label: 'Todos' }, { value: 'IN', label: 'Entradas' }, { value: 'OUT', label: 'Saídas' }]} /></FilterLineItem>}
+            <FilterLineItem><Select aria-label="Situação" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} options={accountTab ? [{ value: 'all', label: 'Todas as pendências' }, { value: 'overdue', label: 'Em atraso' }] : [{ value: 'all', label: 'Todas as situações' }, { value: 'PENDING', label: 'Pendentes' }, { value: 'SETTLED', label: 'Pagos / recebidos' }, { value: 'overdue', label: 'Em atraso' }, { value: 'CANCELLED', label: 'Cancelados' }]} /></FilterLineItem>
+            <FilterLineItem><Select aria-label="Classificação" value={kindFilter} onChange={e => setKindFilter(e.target.value)} options={[{ value: 'all', label: 'Fixos e variáveis' }, { value: 'FIXED', label: 'Fixos' }, { value: 'VARIABLE', label: 'Variáveis' }]} /></FilterLineItem>
+            <FilterLineItem><Select aria-label="Centro de custo" value={centerFilter} onChange={e => setCenterFilter(e.target.value)} options={[{ value: '', label: 'Todos os centros' }, ...[...new Set(entries.map(e => e.costCenter).filter(Boolean))].sort().map(value => ({ value, label: value }))]} /></FilterLineItem>
+            <FilterLineItem><Select aria-label="Conta financeira" value={accountFilter} onChange={e => setAccountFilter(e.target.value)} options={[{ value: '', label: 'Todas as contas' }, ...[...new Set(entries.map(e => e.financialAccount).filter(Boolean))].sort().map(value => ({ value, label: value }))]} /></FilterLineItem>
             <FilterLineItem><Select aria-label="Mês" value={monthFilter} onChange={event => setMonthFilter(event.target.value)} options={[{ value: 'all', label: 'Todos os meses' }, ...monthNames.map((label, index) => ({ value: String(index + 1), label }))]} /></FilterLineItem>
           </FilterLineSection>
           <FilterLineSection align="right">
             <span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'lançamento' : 'lançamentos'}</span>
-            {hasFilter && <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setTypeFilter('all'); setMonthFilter('all'); }}>Limpar filtros</Button>}
+            {hasFilter && <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setTypeFilter('all'); setMonthFilter('all'); setKindFilter('all'); setStatusFilter('all'); setCenterFilter(''); setAccountFilter(''); }}>Limpar filtros</Button>}
           </FilterLineSection>
         </FilterLine>
         <ContentCard padding="none">
-          <GridTable<LedgerEntry> data={paginatedData} columns={columns} keyExtractor={entry => entry.id} noDesktopCard
+          <GridTable<LedgerEntry> data={paginatedData} columns={columns} keyExtractor={entry => entry.id} noDesktopCard onRowClick={entry => openEntry(entry)}
             emptyMessage={<EmptyState icon={ListChecks} title={entries.length ? 'Nenhum lançamento encontrado' : 'Nenhum lançamento neste livro'} description={entries.length ? 'Ajuste a busca ou os filtros.' : 'Registre a primeira entrada ou saída do exercício.'}
-              action={!entries.length && canCreate ? <Button size="sm" onClick={() => setShowEntry(true)}>Novo lançamento</Button> : undefined} />}
+              action={canCreate ? <Button size="sm" onClick={() => openEntry(null)}>Novo lançamento</Button> : undefined} />}
             pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
         </ContentCard>
       </div>}
 
+{tab === 'equipes' && <LedgerTeams year={book.year} userId={userId} onChanged={onPaymentsChanged} />}
       {tab === 'balancete' && <ContentCard padding="none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-left text-xs">
@@ -313,7 +388,15 @@ const BookDetail: React.FC<{ book: FinancialEntity; entries: LedgerEntry[]; user
       </PanelCard>}
     </Tabs>
 
-    <LedgerEntryModal isOpen={showEntry} book={book} userId={userId} onClose={() => setShowEntry(false)} onSaved={onCreated} />
+    <Modal isOpen={showExport} onClose={() => { if (!exporting) setShowExport(false); }} title="Exportar Livro Caixa" size="lg" footer={<ModalFooter>
+      <Button variant="outline" size="sm" disabled={exporting} iconLeft={<Printer size={14} />} onClick={async () => { setExporting(true); try { await printLedger(book, exportScope === 'all' ? entries : filtered, summary, exportScope); } catch (error) { toast.error((error as Error).message); } finally { setExporting(false); } }}>Imprimir / salvar PDF</Button>
+      <Button size="sm" loading={exporting} iconLeft={<Download size={14} />} onClick={exportWorkbook}>Baixar Excel (.xlsx)</Button>
+    </ModalFooter>}><div className="space-y-4"><Select label="Conteúdo do relatório" value={exportScope} onChange={e => setExportScope(e.target.value as 'all' | 'filtered')} options={[{ value: 'all', label: `Livro completo — ${entries.length} lançamentos` }, { value: 'filtered', label: `Somente os filtros da tela — ${filtered.length} lançamentos` }]} /><p className="text-xs text-slate-600">Excel com painel e gráficos editáveis, diário, balancetes, contas financeiras, pendências e uma aba para cada centro de custo utilizado. Tabelas filtráveis, moedas formatadas e cabeçalhos congelados.</p><p className="text-xs text-slate-500">Os filtros do painel atualizam os gráficos. O PDF abre uma prévia com resumo, gráfico e tabelas. Alterações nos arquivos não modificam o sistema.</p></div></Modal>
+    <LedgerEntryModal isOpen={showEntry} book={book} entry={editingEntry} settle={settleEntry} readOnly={!!editingEntry?.readOnly || (!!editingEntry && !canEdit)} defaultType={tab === 'pagar' ? 'OUT' : 'IN'} defaultPending={accountTab} userId={userId} onClose={() => setShowEntry(false)} onSaved={onCreated} />
+    <Modal isOpen={showShare} onClose={() => setShowShare(false)} title="Comunicar resumo do exercício" size="md" footer={<ModalFooter>
+      <Button variant="outline" size="sm" iconLeft={<Copy size={14} />} onClick={async () => { try { await navigator.clipboard.writeText(summary); toast.success('Resumo copiado.'); } catch { toast.error('Não foi possível copiar. Selecione o resumo e copie manualmente.'); } }}>Copiar</Button>
+      <Button size="sm" iconLeft={<Share2 size={14} />} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(summary)}`, '_blank', 'noopener,noreferrer')}>Abrir no WhatsApp</Button>
+    </ModalFooter>}><p className="mb-3 text-xs text-slate-500">Confira os valores antes de compartilhar. Você escolhe o destinatário e confirma o envio no WhatsApp.</p><pre className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs leading-6 text-slate-700">{summary}</pre></Modal>
     <ConfirmModal isOpen={!!removeTarget} onClose={() => setRemoveTarget(null)} onConfirm={remove} loading={removing} title="Excluir lançamento?"
       message={removeTarget ? `${removeTarget.type === 'IN' ? 'Entrada' : 'Saída'} de ${money(removeTarget.amount)} em ${dateLabel(removeTarget.date)} será excluída. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir lançamento" variant="danger" />
   </>;

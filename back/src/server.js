@@ -24,6 +24,7 @@ const dailyEntriesRoutes = require('./routes/daily-entries.routes');
 const bridalCouplesRoutes = require('./routes/bridal-couples.routes');
 const bridalMeetingsRoutes = require('./routes/bridal-meetings.routes');
 const nucleationRoutes = require('./routes/nucleation.routes');
+const blogRoutes = require('./routes/blog.routes');
 
 const app = express();
 
@@ -34,7 +35,10 @@ app.use(express.urlencoded({ extended: true, charset: 'utf-8' }));
 
 // Garantir UTF-8 em todas as respostas
 app.use((req, res, next) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  // Arquivos estáticos precisam conservar seu tipo correto (CSS, PNG, fontes etc.).
+  if (!req.path.startsWith('/site/') && !req.path.startsWith('/uploads/') && !req.path.startsWith('/images/')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  }
   next();
 });
 
@@ -54,6 +58,7 @@ app.use('/daily-entries', dailyEntriesRoutes);
 app.use('/bridal-couples', bridalCouplesRoutes);
 app.use('/bridal-meetings', bridalMeetingsRoutes);
 app.use('/nucleation', nucleationRoutes);
+app.use('/blog', blogRoutes);
 
 // Rotas de finanças (reutiliza o mesmo router para múltiplos endpoints)
 app.use('/', financeRoutes);
@@ -72,10 +77,13 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
 }));
 
 // Servir o front buildado (produção / VPS)
+const publicSitePath = path.join(__dirname, '../../sites/mfc-encontros/dist');
+app.use('/images', express.static(path.join(__dirname, '../../images')));
+app.use('/site', express.static(publicSitePath));
 const frontDistPath = path.join(__dirname, '../../front/dist');
 app.use(express.static(frontDistPath));
 // Só é API quando o caminho é exatamente a raiz (ou começa com ela + "/"): antes "/configuracoes" era tratado como "/config" e dava erro ao atualizar a página.
-app.get(/^(?!\/(?:auth|cities|teams|roles|members|member-photos|users|events|dashboard|config|api|daily-entries|bridal-couples|bridal-meetings|nucleation|payments|event-sales|ledger|ledger-entities|uploads|health)(?:[/?]|$)).*/, (req, res) => {
+app.get(/^(?!\/(?:auth|cities|teams|roles|members|member-photos|users|events|dashboard|config|api|daily-entries|bridal-couples|bridal-meetings|nucleation|blog|payments|event-sales|ledger|ledger-entities|uploads|health)(?:[/?]|$)).*/, (req, res) => {
   res.sendFile(path.join(frontDistPath, 'index.html'));
 });
 

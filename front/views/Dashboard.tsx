@@ -23,7 +23,7 @@ interface Summary {
   barData: { id: string; name: string; paid: number; pending: number; total: number }[];
   trendData: { month: string; value: number }[];
 }
-interface LedgerEntry { id?: string; type: 'IN' | 'OUT'; amount: number; description: string; date: string; }
+interface LedgerEntry { id?: string; type: 'IN' | 'OUT'; amount: number; description: string; date: string; status?: 'SETTLED' | 'PENDING' | 'CANCELLED'; }
 interface Celebration {
   key: string; kind: 'birthday' | 'wedding'; day: number; title: string; subtitle: string; detail: string; phone: string; message: string;
   group?: BirthdayGroup; memberId?: string; isToday: boolean; inNextDays: boolean;
@@ -135,12 +135,13 @@ const Dashboard: React.FC = () => {
 
   const finance = useMemo(() => {
     const prefix = `${year}-${month}`;
-    const monthEntries = ledger.filter(entry => entry.date?.startsWith(prefix));
+    const settled = ledger.filter(entry => !entry.status || entry.status === 'SETTLED');
+    const monthEntries = settled.filter(entry => entry.date?.startsWith(prefix));
     return {
-      balance: ledger.reduce((sum, entry) => sum + (entry.type === 'IN' ? entry.amount : -entry.amount), 0),
+      balance: settled.reduce((sum, entry) => sum + (entry.type === 'IN' ? entry.amount : -entry.amount), 0),
       income: monthEntries.filter(entry => entry.type === 'IN').reduce((sum, entry) => sum + entry.amount, 0),
       expenses: monthEntries.filter(entry => entry.type === 'OUT').reduce((sum, entry) => sum + entry.amount, 0),
-      recent: [...ledger].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6),
+      recent: [...settled].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6),
     };
   }, [ledger, month, year]);
 

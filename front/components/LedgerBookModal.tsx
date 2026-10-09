@@ -36,7 +36,7 @@ export const LedgerBookModal: React.FC<LedgerBookModalProps> = ({ isOpen, book, 
   const invalid = Object.values(errors).some(Boolean);
   const err = (message: string) => touched && message ? <p role="alert" className="mt-1 text-xs text-red-600">{message}</p> : null;
   const yearLocked = !!book && entryCount > 0;
-  const yearOptions = Array.from({ length: 8 }, (_, i) => String(thisYear + 1 - i)).map(value => ({ value, label: value }));
+  const yearOptions = [...new Set([String(book?.year || thisYear), ...Array.from({ length: 30 }, (_, i) => String(thisYear + 1 - i))])].sort((a, b) => Number(b) - Number(a)).map(value => ({ value, label: value }));
 
   const save = async () => {
     setTouched(true);

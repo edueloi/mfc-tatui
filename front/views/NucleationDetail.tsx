@@ -153,7 +153,7 @@ const NucleationDetail: React.FC = () => {
   const groupName = contact.groupName || groups.find(group => group.id === contact.groupId)?.name;
 
   return (
-    <PageWrapper>
+    <PageWrapper className="nucleation-directory">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate(NUCLEATION_BASE)}>Voltar para Nucleação</Button>
@@ -172,8 +172,8 @@ const NucleationDetail: React.FC = () => {
                 <h1 className="text-base sm:text-lg font-semibold text-slate-900 break-words">{contact.name}</h1>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Badge dot color={STATUS_COLOR[contact.status] || 'default'}>{contact.status}</Badge>
-                  {origin && <Badge color="purple" icon={<Heart size={10} />}>Encontro de Noivos: {origin}</Badge>}
-                  {groupName && <Badge color="info">Grupo: {groupName}</Badge>}
+                  {origin && <Badge className="max-w-full whitespace-normal break-words leading-relaxed" color="purple" icon={<Heart size={10} />}>Encontro de Noivos: {origin}</Badge>}
+                  {groupName && <Badge className="max-w-full whitespace-normal break-words leading-relaxed" color="info">Grupo: {groupName}</Badge>}
                   <span className="text-xs text-slate-500">{attempts.length} {attempts.length === 1 ? 'tentativa' : 'tentativas'}</span>
                 </div>
               </div>

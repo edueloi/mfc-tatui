@@ -93,6 +93,15 @@ export const api = {
   registerPublicCouple: (token: string, data: any) => request(`/events/public/${token}/couple`, { method: 'POST', body: JSON.stringify(data) }),
   registerPublicEvent: (token: string, data: any) => request(`/events/public/${token}/register`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // Blog e galeria do site público
+  getBlogPosts: () => request('/blog'),
+  createBlogPost: (data: any) => request('/blog', { method: 'POST', body: JSON.stringify(data) }),
+  updateBlogPost: (id: string, data: any) => request(`/blog/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteBlogPost: (id: string) => request(`/blog/${id}`, { method: 'DELETE' }),
+  uploadBlogImages: (id: string, files: File[]) => { const body = new FormData(); files.forEach(file => body.append('images', file)); return request(`/blog/${id}/images`, { method: 'POST', body }); },
+  deleteBlogImage: (id: string) => request(`/blog/images/${id}`, { method: 'DELETE' }),
+  updateBlogImage: (id: string, data: { caption?: string; sortOrder?: number }) => request(`/blog/images/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
   getEventSales: () => request('/event-sales'),
   deleteEventSale: (id: string) => request(`/event-sales/${id}`, { method: 'DELETE' }),
   createEventSale: (data: any) => request('/event-sales', { method: 'POST', body: JSON.stringify(data) }),
@@ -101,8 +110,25 @@ export const api = {
   createPayment: (data: any) => request('/payments', { method: 'POST', body: JSON.stringify(data) }),
 
   getLedger: () => request('/ledger'),
+  getLedgerPaymentIntegration: () => request('/ledger-payment-integration'),
+  getCostCenters: () => request('/ledger-cost-centers'),
+  createCostCenter: (data: { name: string; description: string }) => request('/ledger-cost-centers', { method: 'POST', body: JSON.stringify(data) }),
+  updateCostCenter: (id: string, data: { name: string; description: string }) => request(`/ledger-cost-centers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCostCenter: (id: string) => request(`/ledger-cost-centers/${id}`, { method: 'DELETE' }),
   createLedger: (data: any) => request('/ledger', { method: 'POST', body: JSON.stringify(data) }),
+  updateLedger: (id: string, data: any) => request(`/ledger/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLedger: (id: string) => request(`/ledger/${id}`, { method: 'DELETE' }),
+  exportLedgerWorkbook: async (id: string, scope: 'all' | 'filtered', filters: Record<string, string> = {}, report: 'ledger' | 'teams' = 'ledger'): Promise<{ blob: Blob; filename: string }> => {
+    const query = new URLSearchParams({ scope, ...filters, report }).toString();
+    const res = await fetch(`${API_URL}/ledger-entities/${id}/export?${query}`);
+    if (!res.ok) {
+      let message = 'Não foi possível gerar a planilha.';
+      try { const data = await res.json(); if (data?.error) message = data.error; } catch (_) { /* ignore */ }
+      throw new Error(message);
+    }
+    const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'livro-caixa.xlsx';
+    return { blob: await res.blob(), filename };
+  },
   getLedgerEntities: () => request('/ledger-entities'),
   createLedgerEntity: (data: any) => request('/ledger-entities', { method: 'POST', body: JSON.stringify(data) }),
   updateLedgerEntity: (id: string, data: any) => request(`/ledger-entities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

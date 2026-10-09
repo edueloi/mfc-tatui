@@ -132,7 +132,19 @@ const rowToLedger = (row) => ({
   amount: parseFloat(row.amount) || 0,
   date: row.date,
   category: row.category || null,
-  createdBy: row.created_by || null
+  createdBy: row.created_by || null,
+  status: row.status || 'SETTLED',
+  dueDate: row.due_date || row.date,
+  valueKind: row.value_kind || 'VARIABLE',
+  expectedAmount: row.expected_amount == null ? (parseFloat(row.amount) || 0) : Number(row.expected_amount),
+  costCenter: row.cost_center || '',
+  costCenterId: row.cost_center_id || null,
+  sourceKey: row.source_key || null,
+  analytic: row.analytic || '',
+  financialAccount: row.financial_account || '',
+  counterparty: row.counterparty || '',
+  paymentMethod: row.payment_method || '',
+  notes: row.notes || ''
 });
 
 const rowToLedgerEntity = (row) => ({
@@ -221,6 +233,8 @@ const rowToNucleationContact = (row) => ({
   name: row.name || '',
   phone1: row.phone_1 || '',
   phone2: row.phone_2 || '',
+  groupId: row.group_id || null,
+  groupName: row.group_name || null,
   status: row.status || 'Pendente',
   convertedMemberId: row.converted_member_id || null,
   createdAt: row.created_at,

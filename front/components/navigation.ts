@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Heart,
   PhoneCall,
+  Images,
 } from 'lucide-react';
 import { UserRoleType, User as UserType } from '../types';
 
@@ -94,6 +95,12 @@ export const navigationSections: NavSection[] = [
         icon: PhoneCall,
         path: '/nucleacao',
         roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE, UserRoleType.COORD_ESTADO],
+      },
+      {
+        name: 'Histórias e Fotos',
+        icon: Images,
+        path: '/historias',
+        roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE, UserRoleType.SEC_COM_CIDADE, UserRoleType.COORD_ESTADO, UserRoleType.SEC_COM_ESTADO],
       },
     ]
   },

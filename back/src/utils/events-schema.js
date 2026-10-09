@@ -42,6 +42,7 @@ const createEventFromMeeting = async meeting => {
   `).run(id, meeting.name, meeting.date, meeting.start_time || null, meeting.end_time || null, meeting.location || null,
     'Encontro de Noivos. Os casais são cadastrados e pagam pela ficha do encontro; aqui ficam os gastos, as entradas e o resultado.',
     Number(meeting.is_active) ? 1 : 0, uuid(), meeting.id, meeting.city_id || null);
+  await require('./ledger-centers').eventCostCenter({ id, name: meeting.name, date: meeting.date });
   return id;
 };
 

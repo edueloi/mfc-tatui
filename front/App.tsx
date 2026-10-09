@@ -25,6 +25,7 @@ import EventFormPage from './views/EventFormPage';
 import EventPublicForm from './views/EventPublicForm';
 import Nucleacao from './views/Nucleacao';
 import NucleationDetail from './views/NucleationDetail';
+import BlogManagement from './views/BlogManagement';
 import { User as UserType } from './types';
 
 // Lido já na primeira renderização: se esperasse um efeito, quem está logado seria mandado para o login ao atualizar a página.
@@ -136,6 +137,7 @@ const App: React.FC = () => {
               <Route path="encontro-noivos/:coupleSlug" element={<BridalCoupleDetail />} />
               <Route path="nucleacao" element={<Nucleacao />} />
               <Route path="nucleacao/:contactSlug" element={<NucleationDetail />} />
+              <Route path="historias" element={<BlogManagement />} />
               <Route path="usuarios" element={<UserManagement />} />
               <Route path="configuracoes" element={<Navigate to="/configuracoes/acessos" replace />} />
               <Route path="configuracoes/:tab" element={<SettingsView />} />

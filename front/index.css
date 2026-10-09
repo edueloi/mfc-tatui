@@ -1,3 +1,64 @@
+/* Blog: biblioteca e editor são áreas separadas; a edição usa toda a largura disponível. */
+.blog-post-link { display: flex; align-items: center; gap: 12px; min-width: 0; width: 100%; text-align: left; border-radius: 6px; }
+.blog-post-thumb { display: grid; place-items: center; flex: 0 0 64px; width: 64px; height: 48px; overflow: hidden; border-radius: 6px; background: #f1f5f9; color: #94a3b8; }
+.blog-post-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.blog-post-link:focus-visible { outline: 2px solid #2563eb; outline-offset: 4px; }
+.blog-post-link:active { background: #eff6ff; }
+.blog-editor-area { min-width: 0; }
+.blog-editor-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 11px; color: #64748b; }
+.blog-management .rich-editor-content { overflow-wrap: anywhere; }
+.blog-management .rich-editor-content img { max-width: 100%; }
+.blog-management .rich-editor-content > p { max-width: 85ch; }
+@media (max-width: 639px) {
+  .blog-management .rich-editor-content { padding: 14px !important; min-height: 280px !important; }
+}
+@media (pointer: coarse) {
+  .blog-management input, .blog-management textarea, .blog-management select, .blog-management [contenteditable="true"] { font-size: 16px !important; }
+  .blog-management button, .blog-management select, .blog-management input:not([type="file"]) { min-height: 44px; }
+  .blog-management .rich-editor-content { -webkit-user-select: text; user-select: text; }
+}
+
+/* Diretório: mesma densidade das demais telas, sem comprimir sete colunas no tablet. */
+.members-directory .member-directory-table { min-width: 0; max-width: 100%; }
+.members-directory .member-name-cell { width: 26%; min-width: 220px; }
+.members-directory .member-detail-cell { max-width: 190px; overflow-wrap: anywhere; }
+.member-identity { display: flex; align-items: center; gap: 10px; min-width: 0; width: 100%; text-align: left; border-radius: 5px; }
+.member-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border: 1px solid #dbeafe; border-radius: 7px; background: #eff6ff; color: #2563eb; font-size: 11px; font-weight: 500; }
+.member-name { display: block; color: #0f172a; font-size: 12px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.member-phone { display: block; color: #64748b; font-size: 11px; margin-top: 2px; overflow-wrap: anywhere; }
+.member-row-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.member-mobile-card { min-width: 0; padding: 3px 0; }
+.member-mobile-heading { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
+.member-mobile-heading .member-identity { flex: 1 1 180px; }
+.member-mobile-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; padding: 14px 0; margin-top: 12px; border-top: 1px solid #f1f5f9; }
+.member-mobile-details dt { font-size: 11px; color: #64748b; margin-bottom: 3px; }
+.member-mobile-details dd { font-size: 12px; color: #334155; overflow-wrap: anywhere; }
+.member-mobile-card .member-row-actions { padding-top: 10px; border-top: 1px solid #f1f5f9; }
+.member-mobile-card .member-row-actions > button:first-child { margin-right: auto; }
+.member-identity:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.member-identity:active { background: #eff6ff; }
+.nucleation-name-cell { width: 32%; min-width: 200px; max-width: 360px; }
+.nucleation-mobile-phones { padding: 12px 0; margin-top: 12px; border-top: 1px solid #f1f5f9; }
+.nucleation-directory a { overflow-wrap: anywhere; }
+@media (hover: hover) and (pointer: fine) {
+  .member-identity:hover .member-name { color: #2563eb; }
+}
+@media (max-width: 639px) {
+  .nucleation-directory .nucleation-status-filter { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .members-directory [role="tabpanel"] { min-width: 0; }
+  .members-directory .member-name { font-size: 13px; }
+}
+/* Entradas legíveis no toque evitam o zoom automático do Safari, sem bloquear o zoom manual. */
+@media (pointer: coarse) {
+  .member-team-modal button, .member-team-modal [role="combobox"] { min-height: 44px; }
+  .members-directory input, .members-directory select { font-size: 16px; min-height: 44px; }
+  .members-directory button { min-height: 44px; }
+  .members-directory .member-row-actions > button { min-width: 44px; }
+  .nucleation-directory input, .nucleation-directory select { font-size: 16px; min-height: 44px; }
+  .nucleation-directory button, .nucleation-directory a { min-height: 44px; }
+  .nucleation-mobile-phones a { display: inline-flex; align-items: center; min-width: 44px; }
+}
+
 /* ── Design System: classes base ──────────────────────────────────────────── */
 
 .ds-label {
@@ -224,3 +285,27 @@ textarea {
   .ui-modal, .animate-in { animation: none; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+.receipt-months { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.receipt-month { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #334155; text-align: left; touch-action: manipulation; user-select: none; }
+.receipt-month--selected { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; box-shadow: inset 0 0 0 1px #2563eb; }
+.receipt-month--paid { background: #f8fafc; color: #64748b; cursor: not-allowed; }
+.receipt-month:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.receipt-month:not(:disabled):active { background: #dbeafe; }
+.receipt-summary { padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; }
+.receipt-summary-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+.receipt-summary-row dt { color: #64748b; }
+.receipt-summary-row dd { margin: 0; max-width: 100%; color: #334155; font-weight: 500; overflow-wrap: anywhere; }
+@media (hover: hover) and (pointer: fine) { .receipt-month:not(:disabled):hover { border-color: #2563eb; background: #eff6ff; } }
+@media (max-width: 379px) { .receipt-months { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (pointer: coarse) {
+  /* Mantém os campos legíveis ao focar no celular e amplia os alvos de toque. */
+  .family-payment-modal input, .family-payment-modal select { font-size: 16px !important; min-height: 44px; }
+  .family-payment-modal button { min-height: 44px; touch-action: manipulation; }
+}
+.ledger-payment-cell { display: flex; flex-direction: column; gap: 3px; width: 100%; min-height: 34px; border: 1px solid transparent; border-radius: 5px; padding: 2px; text-align: right; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; touch-action: manipulation; }
+.ledger-payment-value { display: block; border-radius: 4px; padding: 7px 4px; }
+.ledger-payment-cell--partial { border: 1px dashed #64748b; }
+.ledger-payment-cell--open { color: #64748b; background: #f8fafc; border: 1px dashed #cbd5e1; }
+.ledger-payment-cell:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.ledger-payment-cell:active { filter: brightness(.95); }
+@media (pointer: coarse) { .ledger-family-matrix input, .ledger-family-matrix select { font-size: 16px !important; min-height: 44px; }.ledger-family-matrix button { min-height: 44px; } }

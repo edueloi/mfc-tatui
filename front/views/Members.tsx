@@ -4,14 +4,10 @@ import toast from 'react-hot-toast';
 import {
   Plus,
   X,
-  Heart,
   Users,
   Baby,
   PersonStanding,
   UserRound,
-  Clock,
-  Layers,
-  ChevronRight,
   Filter,
   BriefcaseBusiness,
 } from 'lucide-react';
@@ -26,6 +22,7 @@ import {
   ContentCard,
   Button,
   Select,
+  Combobox,
   Modal,
   ModalFooter,
   ConfirmModal,
@@ -38,7 +35,7 @@ import {
   GridTable,
   usePagination,
 } from '../components/ui';
-import type { Column } from '../components/ui';
+import { MemberDirectoryCard, memberDirectoryColumns } from '../components/MemberDirectoryGrid';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,19 +74,28 @@ const Members: React.FC = () => {
   // Dados
   const [members, setMembers] = useState<Member[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   // Carregamento
-  const loadData = () => {
-    api.getMembers().then(setMembers).catch(() => setMembers([]));
-    api.getTeams().then(setTeams).catch(() => setTeams([]));
-  };
-
   useEffect(() => {
+    let cancelled = false;
+    let pending = false;
+    const loadData = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const [people, groups] = await Promise.all([api.getMembers(), api.getTeams()]);
+        if (!cancelled) { setMembers(people); setTeams(groups); setLoadError(false); }
+      } catch { if (!cancelled) setLoadError(true); }
+      finally { pending = false; if (!cancelled) setLoading(false); }
+    };
     loadData();
     window.addEventListener('focus', loadData);
     const iv = setInterval(loadData, 30000);
-    return () => { window.removeEventListener('focus', loadData); clearInterval(iv); };
-  }, []);
+    return () => { cancelled = true; window.removeEventListener('focus', loadData); clearInterval(iv); };
+  }, [retry]);
 
   // Stats
   const stats = useMemo(() => {
@@ -148,92 +154,29 @@ const Members: React.FC = () => {
     }), { loading: 'Excluindo...', success: 'MFCista excluído! 🗑️', error: (e) => e.message });
   };
 
-  const handleRemoveTeam = () => {
-    toast.promise(api.updateMember(teamModal.memberId, { teamId: null }).then(u => {
-      setMembers(p => p.map(m => m.id === teamModal.memberId ? u : m));
+  const [teamDestination, setTeamDestination] = useState('__none__');
+  const [savingTeam, setSavingTeam] = useState(false);
+  const closeTeam = () => { if (!savingTeam) setTeamModal({ show: false, memberId: '', memberName: '', currentTeamId: null }); };
+  const saveTeam = async () => {
+    if (savingTeam) return;
+    setSavingTeam(true);
+    try {
+      const updated = await api.updateMember(teamModal.memberId, { teamId: teamDestination === '__none__' ? null : teamDestination });
+      setMembers(previous => previous.map(member => member.id === updated.id ? updated : member));
       setTeamModal({ show: false, memberId: '', memberName: '', currentTeamId: null });
-    }), { loading: 'Desvinculando...', success: 'Membro desvinculado! ✅', error: (e) => e.message });
+      toast.success('Equipe atualizada.');
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Não foi possível atualizar a equipe.'); }
+    finally { setSavingTeam(false); }
   };
 
-  const handleTransferTeam = (teamId: string) => {
-    toast.promise(api.updateMember(teamModal.memberId, { teamId }).then(u => {
-      setMembers(p => p.map(m => m.id === teamModal.memberId ? u : m));
-      setTeamModal({ show: false, memberId: '', memberName: '', currentTeamId: null });
-    }), { loading: 'Transferindo...', success: 'Transferido! 🔄', error: (e) => e.message });
+  const directoryActions = {
+    open: (member: Member) => navigate(`/mfcistas/${member.id}`),
+    edit: (member: Member) => navigate(`/mfcistas/${member.id}/editar`),
+    remove: (member: Member) => setDeleteConfirm({ show: true, id: member.id, name: member.name }),
+    team: (member: Member) => { setTeamDestination(member.teamId || '__none__'); setTeamModal({ show: true, memberId: member.id, memberName: member.name, currentTeamId: member.teamId || null }); },
+    teamName: (member: Member) => member.teamId ? teams.find(team => team.id === member.teamId)?.name || 'Equipe não encontrada' : 'Sem equipe',
   };
-
-  // Colunas da tabela
-  const columns: Column<Member>[] = [
-    {
-      header: 'MFCista',
-      render: (m) => (
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center font-black text-[10px] sm:text-sm shrink-0 ${m.gender === 'Masculino' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'}`}>
-            {m.name.substring(0, 2)}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-zinc-900 truncate">{m.name}</p>
-            <p className="text-[10px] text-zinc-400 font-semibold truncate">{m.phone}</p>
-          </div>
-        </div>
-      ),
-    },
-    {
-      header: 'Profissão',
-      render: (m) => <span className={`text-xs ${m.profession?.trim() ? 'text-slate-700' : 'text-slate-400'}`}>{m.profession?.trim() || 'Não informada'}</span>,
-    },
-    {
-      header: 'Equipe',
-      render: (m) => m.teamId
-        ? <span className="text-sm font-semibold text-zinc-700">{teams.find(t => t.id === m.teamId)?.name || '—'}</span>
-        : <span className="text-xs text-zinc-400 italic">Sem equipe</span>,
-    },
-    {
-      header: 'Tempo MFC',
-      render: (m) => (
-        <div>
-          <p className="text-sm font-bold text-zinc-800">{calcYears(m.mfcDate)} anos</p>
-          <p className="text-[10px] text-zinc-400">desde {new Date(m.mfcDate).getFullYear()}</p>
-        </div>
-      ),
-    },
-    {
-      header: 'Idade',
-      render: (m) => (
-        <div>
-          <p className="text-sm font-bold text-zinc-800">{calcYears(m.dob)} anos</p>
-          <p className="text-[10px] text-zinc-400">{m.gender === 'Masculino' ? 'Masculino' : 'Feminino'}</p>
-        </div>
-      ),
-    },
-    {
-      header: 'Status',
-      render: (m) => (
-        <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide ${
-          m.status === MemberStatus.ATIVO ? 'bg-emerald-100 text-emerald-700' :
-          m.status === MemberStatus.AGUARDANDO ? 'bg-amber-100 text-amber-700' :
-          'bg-zinc-100 text-zinc-500'}`}>
-          {m.status}
-        </span>
-      ),
-    },
-    {
-      header: 'Ações',
-      render: (m) => (
-        <div className="flex flex-wrap gap-1.5 sm:justify-end">
-          {m.teamId && (
-            <Button variant="ghost" size="xs" iconLeft={<Layers className="w-3.5 h-3.5" />}
-              className="flex-1 sm:flex-initial"
-              onClick={(e) => { e.stopPropagation(); setTeamModal({ show: true, memberId: m.id, memberName: m.name, currentTeamId: m.teamId || null }); }}>
-              Equipe
-            </Button>
-          )}
-          <Button variant="outline" size="xs" className="flex-1 sm:flex-initial" onClick={(e) => { e.stopPropagation(); navigate(`/mfcistas/${m.id}/editar`); }}>Editar</Button>
-          <Button variant="danger" size="xs" className="flex-1 sm:flex-initial" onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ show: true, id: m.id, name: m.name }); }}>Excluir</Button>
-        </div>
-      ),
-    },
-  ];
+  const columns = memberDirectoryColumns(directoryActions);
 
   const currentMonth = new Date().getMonth() + 1;
   const birthdays = filtered.filter(m => m.dob && new Date(m.dob).getMonth() + 1 === currentMonth)
@@ -242,16 +185,16 @@ const Members: React.FC = () => {
   const MONTH_NAMES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
   return (
-    <PageWrapper>
-      <div className="space-y-6">
+    <PageWrapper className="members-directory">
+      <div className="min-w-0 space-y-4">
 
         {/* Header */}
         <SectionTitle
-          title="Comunidade MFC"
-          description="Gestão demográfica e administrativa de MFCistas"
+          title="MFCistas"
+          description="Cadastros, equipes e profissões da comunidade"
           icon={Users}
           action={
-            <Button variant="primary" size="md" iconLeft={<Plus className="w-4 h-4" />} onClick={() => navigate('/mfcistas/novo')}>
+            <Button variant="primary" size="sm" iconLeft={<Plus size={14} />} onClick={() => navigate('/mfcistas/novo')}>
               Novo MFCista
             </Button>
           }
@@ -406,20 +349,24 @@ const Members: React.FC = () => {
         </div>
 
         {/* Tabela */}
-        <ContentCard padding="none">
+        {loadError && <ContentCard><EmptyState icon={Users} title="Não foi possível atualizar os MFCistas" description="Se houver dados carregados, eles continuam abaixo. Confira a conexão e tente novamente." action={<Button size="sm" onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard>}
+        <div className="member-directory-table">
           <GridTable
             columns={columns}
             data={paginatedData}
             keyExtractor={(m) => m.id}
             onRowClick={(m) => navigate(`/mfcistas/${m.id}`)}
-            noDesktopCard
+            isLoading={loading}
+            mobileBreakpoint="xl"
+            tableMinWidth={940}
+            renderMobileItem={member => <MemberDirectoryCard member={member} actions={directoryActions} />}
             emptyMessage={
               <EmptyState icon={Users} title="Nenhum MFCista encontrado" description="Tente ajustar os filtros ou cadastre um novo membro."
                 action={<Button variant="primary" size="sm" onClick={resetFilters}>Limpar Filtros</Button>} />
             }
             pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }}
           />
-        </ContentCard>
+        </div>
         </div>
 
       </div>
@@ -435,48 +382,22 @@ const Members: React.FC = () => {
         variant="danger"
       />
 
-      {/* ── Modal Gerenciar Equipe ─────────────────────────────────────────────── */}
-      <Modal
-        isOpen={teamModal.show}
-        onClose={() => setTeamModal({ show: false, memberId: '', memberName: '', currentTeamId: null })}
-        title="Gerenciar Equipe"
-        size="sm"
-      >
+      <Modal isOpen={teamModal.show} onClose={closeTeam} title="Gerenciar equipe" size="md" className="member-team-modal"
+        footer={<ModalFooter><Button variant="ghost" size="sm" disabled={savingTeam} onClick={closeTeam}>Cancelar</Button><Button size="sm" loading={savingTeam} disabled={teamDestination === (teamModal.currentTeamId || '__none__')} onClick={saveTeam}>Salvar alterações</Button></ModalFooter>}>
         <div className="space-y-4">
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-            <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-0.5">Equipe Atual</p>
-            <p className="text-sm font-black text-zinc-900">
-              {teamModal.currentTeamId ? teams.find(t => t.id === teamModal.currentTeamId)?.name || '—' : 'Sem equipe'}
-            </p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-sm font-medium text-slate-900 break-words">{teamModal.memberName}</p>
+            <p className="mt-1 text-xs text-slate-500">Equipe atual: <span className="text-slate-700">{teams.find(team => team.id === teamModal.currentTeamId)?.name || 'Sem equipe'}</span></p>
           </div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Transferir para:</p>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {teams.filter(t => t.id !== teamModal.currentTeamId).map(team => (
-              <button key={team.id} onClick={() => handleTransferTeam(team.id)}
-                className="w-full p-3 bg-zinc-50 hover:bg-amber-50 border border-zinc-200 hover:border-amber-300 rounded-xl text-left transition-all flex items-center justify-between group">
-                <div>
-                  <p className="text-sm font-bold text-zinc-900 group-hover:text-amber-700">{team.name}</p>
-                  <p className="text-xs text-zinc-400">{team.city} - {team.state}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-amber-500" />
-              </button>
-            ))}
+          <div>
+            <p className="ds-label mb-1.5" id="member-team-label">Equipe de destino</p>
+            <div role="group" aria-labelledby="member-team-label">
+              <Combobox disabled={savingTeam} allowDeselect={false} value={teamDestination} onChange={value => setTeamDestination(String(value))} searchPlaceholder="Buscar equipe…"
+                options={[{ value: '__none__', label: 'Sem equipe', subtitle: 'Remover o vínculo atual' }, ...teams.map(team => ({ value: team.id, label: team.name, subtitle: [team.city, team.state].filter(Boolean).join(' / ') }))]} />
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">{teamDestination === '__none__' ? 'Ao salvar, o MFCista ficará sem equipe. O cadastro será mantido.' : 'A mudança de equipe será aplicada somente ao salvar.'}</p>
           </div>
-          {teamModal.currentTeamId && (
-            <button onClick={handleRemoveTeam}
-              className="w-full p-3 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl text-left transition-all flex items-center gap-3">
-              <X className="w-4 h-4 text-red-600" />
-              <div>
-                <p className="text-sm font-bold text-red-700">Remover da Equipe</p>
-                <p className="text-xs text-red-400">O membro ficará sem equipe</p>
-              </div>
-            </button>
-          )}
         </div>
-        <ModalFooter>
-          <div />
-          <Button variant="outline" size="sm" onClick={() => setTeamModal({ show: false, memberId: '', memberName: '', currentTeamId: null })}>Fechar</Button>
-        </ModalFooter>
       </Modal>
 
     </PageWrapper>

@@ -58,6 +58,7 @@ export function Pagination({
     <button
       type="button"
       title={title}
+      aria-label={title}
       disabled={disabled}
       onClick={onClick}
       className={cn(
@@ -82,10 +83,12 @@ export function Pagination({
       </p>
 
       {/* Center: page controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex max-w-full items-center gap-1">
         {btn(<ChevronsLeft size={13} />, () => onPageChange(1),           page <= 1,           "Primeira página")}
         {btn(<ChevronLeft  size={13} />, () => onPageChange(page - 1),    page <= 1,           "Página anterior")}
 
+        <span className="px-2 text-xs text-slate-600 tabular-nums sm:hidden" aria-live="polite">{page} / {totalPages}</span>
+        <div className="hidden items-center gap-1 sm:flex">
         {pageNumbers.map((p, idx) =>
           p === "..." ? (
             <span key={`e${idx}`} className="w-8 text-center text-xs text-zinc-300 font-bold">…</span>
@@ -93,6 +96,8 @@ export function Pagination({
             <button
               key={p}
               type="button"
+              aria-label={`Página ${p}`}
+              aria-current={p === page ? 'page' : undefined}
               onClick={() => onPageChange(p as number)}
               className={cn(
                 "w-8 h-8 flex items-center justify-center rounded-md text-xs font-semibold transition-all",
@@ -105,6 +110,7 @@ export function Pagination({
             </button>
           )
         )}
+        </div>
 
         {btn(<ChevronRight  size={13} />, () => onPageChange(page + 1),    page >= totalPages,  "Próxima página")}
         {btn(<ChevronsRight size={13} />, () => onPageChange(totalPages),   page >= totalPages,  "Última página")}
@@ -115,6 +121,7 @@ export function Pagination({
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[11px] font-medium text-slate-500 hidden sm:inline">Por página</span>
           <select
+            aria-label="Registros por página"
             value={pageSize}
             onChange={e => { onPageSizeChange(Number(e.target.value)); onPageChange(1); }}
             className="h-8 px-2 text-xs font-semibold text-zinc-700 bg-white border border-zinc-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/10 transition-all cursor-pointer"

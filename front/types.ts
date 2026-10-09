@@ -378,3 +378,24 @@ export interface NucleationGroup {
   contacts?: NucleationContact[];
   history?: NucleationGroupHistory[];
 }
+
+export interface BlogImage {
+  id: string;
+  imageUrl: string;
+  caption: string;
+  sortOrder: number;
+}
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  coverImage: string;
+  publishedAt: string;
+  published: boolean;
+  featured: boolean;
+  createdAt: string;
+  updatedAt: string;
+  images: BlogImage[];
+}

@@ -17,6 +17,23 @@ function loadSource(entry) {
 const { birthdayGroup, birthdayMessage, weddingMessage } = loadSource('utils/birthdayMessages.ts');
 const { whatsappNumber, whatsappUrl } = loadSource('utils/whatsapp.ts');
 const { meetingSlug, findMeeting, coupleSlug, findCouple } = loadSource('utils/bridalPaths.ts');
+const { ledgerReportHtml } = loadSource('utils/ledgerReportHtml.ts');
+
+test('relatório PDF: conteúdo escapado, resumo completo e saldo inicial só no livro inteiro', () => {
+  const book = { name: 'Ação <script>alert(1)</script>', year: 2026, initialBalance: 50 };
+  const rows = [{ id: 'test', date: '2026-01-10', type: 'IN', amount: 120, costCenter: 'Sede', description: '<img onerror="alert(1)">' }];
+  const full = ledgerReportHtml(book, rows, 'all');
+  assert.match(full, /Ação &lt;script&gt;/);
+  assert.doesNotMatch(full, /<script>/);
+  assert.doesNotMatch(full, /<img onerror/);
+  assert.match(full, /170,00/);
+  assert.match(full, /Balancete mensal/);
+  assert.match(full, /Diário de lançamentos/);
+  assert.match(full, /<svg/);
+  const filtered = ledgerReportHtml(book, rows, 'filtered');
+  assert.doesNotMatch(filtered, /170,00/);
+  assert.match(filtered, /saldo inicial não incluído/);
+});
 
 test('grupo da mensagem: menor de idade e 60+ vêm antes do sexo', () => {
   assert.equal(birthdayGroup(15, 'Feminino'), 'jovem');
@@ -98,6 +115,21 @@ test('livro caixa: saldo, totais por mês e balancete vêm dos lançamentos', ()
   assert.equal(bookSlug(books[1], books), 'livro-caixa-2026');
   assert.equal(findBook(books, 'livro-caixa-2025').id, 'a');
   assert.equal(findBook(books, 'b').id, 'b');
+});
+
+test('livro caixa separa pendências e cancelamentos do saldo realizado', () => {
+  const { summarize, monthlyTotals, balanceSheet, pendingTotals, isOverdue, csvCell, lastDayOfMonth } = loadSource('utils/ledger.ts');
+  const base = { date: '2026-10-08', category: 'Internet', amount: 100, type: 'OUT' };
+  const rows = [{ ...base, status: 'SETTLED', amount: 120 }, { ...base, status: 'PENDING', dueDate: '2026-10-07' }, { ...base, status: 'PENDING', type: 'IN', amount: 250, dueDate: '2026-10-09' }, { ...base, status: 'CANCELLED', amount: 999 }, { ...base, type: 'IN', amount: 40 }];
+  assert.deepEqual(summarize(rows, 1000), { income: 40, expenses: 120, balance: 920 });
+  assert.equal(monthlyTotals(rows).expenses[9], 120);
+  assert.equal(balanceSheet(rows).expenses[0].total, 120);
+  assert.deepEqual(pendingTotals(rows, '2026-10-08'), { receivable: 250, payable: 100, overdueCount: 1, overdueAmount: 100 });
+  assert.equal(isOverdue({ ...base, status: 'PENDING', dueDate: '2026-10-08' }, '2026-10-08'), false);
+  assert.equal(lastDayOfMonth(2026, 2), 28);
+  assert.equal(lastDayOfMonth(2024, 2), 29);
+  assert.equal(csvCell('=1+1'), '"\'=1+1"');
+  assert.equal(csvCell('Doação; "família"'), '"Doação; ""família"""');
 });
 
 test('eventos: fases, encerramento em 7 dias, venda só com taxa e escopo por equipe', () => {

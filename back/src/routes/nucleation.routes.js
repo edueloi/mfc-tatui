@@ -8,6 +8,30 @@ const { nowIso } = require('../utils/helpers');
 
 const router = express.Router();
 
+let nucleationGroupsReady;
+const ensureNucleationGroups = () => {
+  if (!nucleationGroupsReady) nucleationGroupsReady = (async () => {
+    await db.prepare(`CREATE TABLE IF NOT EXISTS nucleation_groups (
+      id VARCHAR(36) PRIMARY KEY, name VARCHAR(150) NOT NULL, description TEXT NULL,
+      created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`).run();
+    await db.prepare(`CREATE TABLE IF NOT EXISTS nucleation_group_history (
+      id VARCHAR(36) PRIMARY KEY, group_id VARCHAR(36) NOT NULL, occurred_at VARCHAR(20) NULL,
+      notes TEXT NOT NULL, created_at DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`).run();
+    const columns = await db.prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nucleation_contacts'").all();
+    if (!columns.some(column => (column.COLUMN_NAME || column.column_name) === 'group_id')) {
+      await db.prepare('ALTER TABLE nucleation_contacts ADD COLUMN group_id VARCHAR(36) NULL').run();
+    }
+  })().catch(error => { nucleationGroupsReady = undefined; throw error; });
+  return nucleationGroupsReady;
+};
+
+router.use(async (req, res, next) => {
+  try { await ensureNucleationGroups(); next(); }
+  catch (error) { next(error); }
+});
+
 async function loadContactFull(id) {
   const contactRow = await db.prepare('SELECT * FROM nucleation_contacts WHERE id = ?').get(id);
   if (!contactRow) return null;
@@ -26,10 +50,12 @@ router.get('/', async (req, res) => {
       nc.*,
       (SELECT COUNT(*) FROM nucleation_attempts na WHERE na.nucleation_id = nc.id) AS attempts_count,
       p1.name AS couple_noivo_name,
-      p2.name AS couple_noiva_name
+      p2.name AS couple_noiva_name,
+      ng.name AS group_name
     FROM nucleation_contacts nc
     LEFT JOIN bridal_partners p1 ON p1.couple_id = nc.couple_id AND p1.role = 'noivo'
     LEFT JOIN bridal_partners p2 ON p2.couple_id = nc.couple_id AND p2.role = 'noiva'
+    LEFT JOIN nucleation_groups ng ON ng.id = nc.group_id
     ORDER BY nc.created_at DESC
   `).all();
 
@@ -39,6 +65,62 @@ router.get('/', async (req, res) => {
     coupleNoivoName: row.couple_noivo_name || null,
     coupleNoivaName: row.couple_noiva_name || null
   })));
+});
+
+router.get('/groups', async (req, res) => {
+  try {
+    const groups = await db.prepare(`SELECT ng.*, COUNT(nc.id) AS contacts_count
+      FROM nucleation_groups ng LEFT JOIN nucleation_contacts nc ON nc.group_id = ng.id
+      GROUP BY ng.id ORDER BY ng.name`).all();
+    res.json(groups.map(group => ({ id: group.id, name: group.name, description: group.description || '', contactsCount: Number(group.contacts_count) || 0, createdAt: group.created_at, updatedAt: group.updated_at })));
+  } catch (error) { res.status(500).json({ error: 'Erro ao buscar grupos de nucleação: ' + error.message }); }
+});
+
+router.post('/groups', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    if (name.length < 3) return res.status(400).json({ error: 'Informe o nome do grupo (mínimo 3 letras).' });
+    const id = uuid(), ts = nowIso();
+    await db.prepare('INSERT INTO nucleation_groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, name, String(req.body?.description || '').trim(), ts, ts);
+    res.status(201).json({ id, name, description: String(req.body?.description || '').trim(), contactsCount: 0, createdAt: ts, updatedAt: ts });
+  } catch (error) { res.status(500).json({ error: 'Erro ao criar grupo de nucleação: ' + error.message }); }
+});
+
+router.get('/groups/:id', async (req, res) => {
+  try {
+    const group = await db.prepare('SELECT * FROM nucleation_groups WHERE id = ?').get(req.params.id);
+    if (!group) return res.status(404).json({ error: 'Grupo não encontrado.' });
+    const [contacts, history] = await Promise.all([
+      db.prepare(`SELECT nc.*, ng.name AS group_name, (SELECT COUNT(*) FROM nucleation_attempts na WHERE na.nucleation_id = nc.id) AS attempts_count FROM nucleation_contacts nc LEFT JOIN nucleation_groups ng ON ng.id = nc.group_id WHERE nc.group_id = ? ORDER BY nc.name`).all(group.id),
+      db.prepare('SELECT * FROM nucleation_group_history WHERE group_id = ? ORDER BY occurred_at DESC, created_at DESC').all(group.id),
+    ]);
+    res.json({ id: group.id, name: group.name, description: group.description || '', createdAt: group.created_at, updatedAt: group.updated_at,
+      contacts: contacts.map(row => ({ ...rowToNucleationContact(row), attemptsCount: Number(row.attempts_count) || 0 })),
+      history: history.map(item => ({ id: item.id, groupId: item.group_id, occurredAt: item.occurred_at || '', notes: item.notes || '', createdAt: item.created_at })) });
+  } catch (error) { res.status(500).json({ error: 'Erro ao buscar grupo de nucleação: ' + error.message }); }
+});
+
+router.post('/groups/:id/history', async (req, res) => {
+  try {
+    const group = await db.prepare('SELECT id FROM nucleation_groups WHERE id = ?').get(req.params.id);
+    const notes = String(req.body?.notes || '').trim();
+    if (!group) return res.status(404).json({ error: 'Grupo não encontrado.' });
+    if (!notes) return res.status(400).json({ error: 'Descreva o histórico do grupo.' });
+    const id = uuid(), ts = nowIso(), occurredAt = String(req.body?.occurredAt || '').slice(0, 20);
+    await db.prepare('INSERT INTO nucleation_group_history (id, group_id, occurred_at, notes, created_at) VALUES (?, ?, ?, ?, ?)').run(id, group.id, occurredAt, notes, ts);
+    res.status(201).json({ id, groupId: group.id, occurredAt, notes, createdAt: ts });
+  } catch (error) { res.status(500).json({ error: 'Erro ao registrar histórico do grupo: ' + error.message }); }
+});
+
+router.put('/:id/group', async (req, res) => {
+  try {
+    const groupId = req.body?.groupId || null;
+    if (groupId && !(await db.prepare('SELECT id FROM nucleation_groups WHERE id = ?').get(groupId))) return res.status(404).json({ error: 'Grupo não encontrado.' });
+    await db.prepare('UPDATE nucleation_contacts SET group_id = ?, updated_at = ? WHERE id = ?').run(groupId, nowIso(), req.params.id);
+    const contact = await loadContactFull(req.params.id);
+    if (!contact) return res.status(404).json({ error: 'Contato não encontrado.' });
+    res.json(contact);
+  } catch (error) { res.status(500).json({ error: 'Erro ao vincular contato ao grupo: ' + error.message }); }
 });
 
 router.get('/:id', async (req, res) => {

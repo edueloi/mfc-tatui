@@ -195,10 +195,28 @@ const recomputeCost = async eventId => {
 
 /* ───────────── Inscrição pública (por link) ───────────── */
 
+/**
+ * Eventos antigos de Encontro de Noivos podem ter sido criados antes do vínculo
+ * `bridal_meeting_id`. Recupera a turma pelo mesmo nome e data e já corrige o
+ * vínculo, para que o link público abra a ficha completa do casal.
+ */
+const bridalMeetingIdForEvent = async event => {
+  if (!event) return null;
+  if (event.bridal_meeting_id) return event.bridal_meeting_id;
+  const looksBridal = /encontro de noivos/i.test(`${event.name || ''} ${event.description || ''}`);
+  if (!looksBridal || !event.name || !event.date) return null;
+  const meeting = await db.prepare('SELECT id FROM bridal_meetings WHERE name = ? AND date = ? LIMIT 1').get(event.name, event.date);
+  if (!meeting) return null;
+  await db.prepare('UPDATE events SET bridal_meeting_id = ? WHERE id = ?').run(meeting.id, event.id);
+  event.bridal_meeting_id = meeting.id;
+  return meeting.id;
+};
+
 router.get('/public/:token', async (req, res) => {
   try {
     const event = await db.prepare('SELECT * FROM events WHERE public_token = ?').get(req.params.token);
     if (!event) return res.status(404).json({ error: 'Evento não encontrado.' });
+    const bridalMeetingId = await bridalMeetingIdForEvent(event);
     const occupied = await occupiedPeople(event.id);
     const closedReason = (event.event_kind || 'interno') !== 'externo' ? 'Este evento é interno e não aceita inscrição pelo link.' : await registrationBlocked(event, 1, { isPublic: true });
     res.json({
@@ -207,7 +225,7 @@ router.get('/public/:token', async (req, res) => {
       location: event.location || '', description: event.bridal_meeting_id && /^Encontro de Noivos\. Os casais/.test(event.description || '') ? '' : event.description || '', imageUrl: event.image_url || '', kind: event.event_kind || 'interno',
       hasFee: toBool(event.has_fee), ticketValue: num(event.ticket_value), registrationDeadline: event.registration_deadline || '',
       spotsLeft: event.capacity ? Math.max(0, Number(event.capacity) - occupied) : null, open: !closedReason, closedReason: closedReason || '', past: event.date < todayIso(),
-      bridal: !!event.bridal_meeting_id,
+      bridal: !!bridalMeetingId,
     });
   } catch (error) { res.status(500).json({ error: 'Erro ao buscar evento: ' + error.message }); }
 });
@@ -217,7 +235,7 @@ router.post('/public/:token/register', async (req, res) => {
     const event = await db.prepare('SELECT * FROM events WHERE public_token = ?').get(req.params.token);
     if (!event) return res.status(404).json({ error: 'Evento não encontrado.' });
     if ((event.event_kind || 'interno') !== 'externo') return res.status(422).json({ error: 'Este evento é interno e não aceita inscrição pelo link.' });
-    if (event.bridal_meeting_id) return res.status(422).json({ error: 'Este é um Encontro de Noivos: a inscrição é feita pela ficha do casal.' });
+    if (await bridalMeetingIdForEvent(event)) return res.status(422).json({ error: 'Este é um Encontro de Noivos: a inscrição é feita pela ficha do casal.' });
     const data = req.body || {};
     if (String(data.name || '').trim().length < 3) return res.status(400).json({ error: 'Informe seu nome completo.' });
     const phoneDigits = String(data.phone || '').replace(/\D/g, '');
@@ -252,8 +270,9 @@ const checkPartner = (partner, who) => {
 router.post('/public/:token/couple', async (req, res) => {
   try {
     const event = await db.prepare('SELECT * FROM events WHERE public_token = ?').get(req.params.token);
-    if (!event || !event.bridal_meeting_id) return res.status(404).json({ error: 'Encontro não encontrado.' });
-    const meeting = await db.prepare('SELECT * FROM bridal_meetings WHERE id = ?').get(event.bridal_meeting_id);
+    const bridalMeetingId = await bridalMeetingIdForEvent(event);
+    if (!event || !bridalMeetingId) return res.status(404).json({ error: 'Encontro não encontrado.' });
+    const meeting = await db.prepare('SELECT * FROM bridal_meetings WHERE id = ?').get(bridalMeetingId);
     if (!meeting) return res.status(404).json({ error: 'Encontro não encontrado.' });
     const problem = checkPartner(req.body?.noivo, 'do noivo') || checkPartner(req.body?.noiva, 'da noiva');
     if (problem) return res.status(400).json({ error: problem });
@@ -279,6 +298,24 @@ router.post('/public/:token/couple', async (req, res) => {
     }
     res.status(201).json({ ok: true, couplePublicToken: token, pixKey: meeting.pix_key || '', meetingName: meeting.name, noivoName: text(noivo.name), noivaName: text(noiva.name) });
   } catch (error) { res.status(500).json({ error: 'Erro ao registrar a inscrição do casal: ' + error.message }); }
+});
+
+/** Agenda pública: somente eventos externos que ainda aceitam inscrição pelo link. */
+router.get('/public-open', async (req, res) => {
+  try {
+    const rows = await db.prepare("SELECT * FROM events WHERE event_kind = 'externo' AND is_active = 1 AND public_token IS NOT NULL ORDER BY date, start_time, name").all();
+    const events = [];
+    for (const event of rows) {
+      if (await registrationBlocked(event, 1, { isPublic: true })) continue;
+      const bridalMeetingId = await bridalMeetingIdForEvent(event);
+      events.push({
+        name: event.name, date: event.date, endDate: event.end_date || '', startTime: event.start_time || '', endTime: event.end_time || '',
+        location: event.location || '', description: bridalMeetingId && /^Encontro de Noivos\. Os casais/.test(event.description || '') ? '' : event.description || '',
+        imageUrl: event.image_url || '', publicToken: event.public_token, bridal: !!bridalMeetingId,
+      });
+    }
+    res.json(events);
+  } catch (error) { res.status(500).json({ error: 'Erro ao buscar agenda pública: ' + error.message }); }
 });
 
 /* ───────────── Eventos ───────────── */
@@ -381,6 +418,7 @@ router.post('/', async (req, res) => {
     `).run({ ...e, id, hasFee: toInt(e.hasFee), registrationOpen: toInt(e.registrationOpen), isActive: toInt(e.isActive), isClosed: toInt(e.isClosed), showOnDashboard: toInt(e.showOnDashboard), token: uuid() });
     await saveRelations(id, req.body || {});
     const [created] = await loadEvents(id);
+    await require('../utils/ledger-centers').eventCostCenter({ id, name: created.name, date: created.date });
     res.status(201).json(created);
   } catch (error) { res.status(500).json({ error: 'Erro ao criar evento: ' + error.message }); }
 });

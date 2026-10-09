@@ -37,6 +37,9 @@ export interface GridTableProps<T> {
   getMobileBorderClass?: (row: T) => string;
   // Feature: Force standard table even on mobile if needed
   disableMobileCards?: boolean;
+  /** Dense tables may keep cards until a wider viewport. Defaults preserve existing screens. */
+  mobileBreakpoint?: 'sm' | 'lg' | 'xl';
+  tableMinWidth?: number;
   // Feature: Remove the card wrapper (border/shadow/rounded) from the desktop table — use when the parent already provides the container styling
   noDesktopCard?: boolean;
   // Pagination — when provided, GridTable renders a Pagination bar at the bottom
@@ -177,7 +180,7 @@ export function GridTable<T>({
   data, columns, keyExtractor, selectedIds, onToggleSelect, onToggleSelectAll,
   onRowClick, emptyMessage = 'Nenhum registro encontrado.', sortKey, sortOrder = 'asc', onSort, isLoading = false,
   renderMobileItem, renderMobileExpandedContent, renderMobileAvatar, getMobileBorderClass,
-  disableMobileCards = false, noDesktopCard = false, pagination,
+  disableMobileCards = false, noDesktopCard = false, pagination, mobileBreakpoint = 'sm', tableMinWidth,
 }: GridTableProps<T>) {
   const isSelectable = !!selectedIds && !!onToggleSelect;
   const allSelected = isSelectable && data.length > 0 && data.every((row) => selectedIds.has(String(keyExtractor(row))));
@@ -223,15 +226,15 @@ export function GridTable<T>({
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0 max-w-full">
       {/* ─── DESKTOP TABLE VIEW ─── */}
       <div className={cn(
         !noDesktopCard && 'bg-white sm:border border-zinc-200 sm:rounded-lg sm:shadow-sm',
         'overflow-hidden',
-        !disableMobileCards && 'hidden sm:block',
+        !disableMobileCards && ({ sm: 'hidden sm:block', lg: 'hidden lg:block', xl: 'hidden xl:block' }[mobileBreakpoint]),
       )}>
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse" style={{ minWidth: disableMobileCards ? 0 : 520 }}>
+          <table className="w-full text-left border-collapse" style={{ minWidth: tableMinWidth ?? (disableMobileCards ? 0 : 520) }}>
             <thead className="bg-zinc-50 border-b border-zinc-200">
               <tr>
                 {isSelectable && (
@@ -318,7 +321,7 @@ export function GridTable<T>({
 
       {/* ─── MOBILE CARD VIEW ─── */}
       {!disableMobileCards && (
-        <div className="block sm:hidden space-y-2 pb-2">
+        <div className={cn('space-y-2 pb-2', { sm: 'block sm:hidden', lg: 'block lg:hidden', xl: 'block xl:hidden' }[mobileBreakpoint])}>
           {isLoading ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="animate-pulse bg-white border border-zinc-200 rounded-lg p-4 flex flex-col gap-3">

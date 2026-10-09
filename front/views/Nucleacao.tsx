@@ -6,7 +6,7 @@ import { api } from '../api';
 import { NucleationContact, NucleationGroup } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
-  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, Modal, ModalFooter, Input, DatePicker, PanelCard, usePagination,
+  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, Modal, ModalFooter, Input, Select, DatePicker, PanelCard, usePagination,
 } from '../components/ui';
 import type { Column } from '../components/ui';
 import { NucleationContactModal } from '../components/NucleationContactModal';
@@ -58,8 +58,11 @@ const Nucleacao: React.FC = () => {
   }, [retry]);
 
   useEffect(() => {
+    let cancelled = false;
+    setGroupDetail(null);
     if (groupView === 'geral') { setGroupDetail(null); return; }
-    api.getNucleationGroup(groupView).then(setGroupDetail).catch(() => setGroupDetail(null));
+    api.getNucleationGroup(groupView).then(group => { if (!cancelled) setGroupDetail(group); }).catch(() => { if (!cancelled) setGroupDetail(null); });
+    return () => { cancelled = true; };
   }, [groupView]);
 
   const query = normalizeDirectoryText(search);
@@ -70,6 +73,7 @@ const Nucleacao: React.FC = () => {
     && (statusFilter === 'Todos' || contact.status === statusFilter)
   ), [scopedContacts, query, digits, statusFilter]);
   const { page, setPage, pageSize, setPageSize, paginatedData } = usePagination(filtered, 15);
+  useEffect(() => { setPage(1); }, [search, statusFilter, groupView]);
 
   const stats = useMemo(() => ({
     total: contacts.length,
@@ -119,8 +123,8 @@ const Nucleacao: React.FC = () => {
   };
 
   const columns: Column<NucleationContact>[] = [
-    { header: 'Contato', render: contact => <div className="min-w-0">
-      <p className="text-xs font-medium text-slate-800 break-words">{contact.name}</p>
+    { header: 'Contato', className: 'nucleation-name-cell', render: contact => <div className="min-w-0">
+      <button type="button" className="member-identity text-xs font-medium text-slate-800 [overflow-wrap:anywhere]" onClick={event => { event.stopPropagation(); open(contact); }}>{contact.name}</button>
       <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500">
         <span>{contact.attemptsCount || 0} {contact.attemptsCount === 1 ? 'tentativa' : 'tentativas'}</span>
         {contact.coupleId && <span className="inline-flex items-center gap-1 text-rose-600"><Heart size={10} />Encontro de Noivos</span>}
@@ -136,7 +140,7 @@ const Nucleacao: React.FC = () => {
       })}</ul> : <span className="text-xs text-slate-400">Não informado</span>;
     } },
     { header: 'Status', render: contact => <Badge size="sm" dot color={STATUS_COLOR[contact.status] || 'default'}>{contact.status}</Badge> },
-    ...(groupView === 'geral' ? [{ header: 'Grupo', render: (contact: NucleationContact) => contact.groupName ? <Badge size="sm" color="info">{contact.groupName}</Badge> : <span className="text-xs text-slate-400">Sem grupo</span> } as Column<NucleationContact>] : []),
+    ...(groupView === 'geral' ? [{ header: 'Grupo', className: 'max-w-[200px] [overflow-wrap:anywhere]', render: (contact: NucleationContact) => <span className="text-xs text-slate-600">{contact.groupName || 'Sem grupo'}</span> } as Column<NucleationContact>] : []),
     { header: 'Ações', render: contact => <div className="flex items-center gap-1.5 sm:justify-end">
       <Button variant="outline" size="xs" iconRight={<ArrowRight size={12} />} onClick={event => { event.stopPropagation(); open(contact); }}>Abrir</Button>
       {canDelete && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${contact.name}`} onClick={event => { event.stopPropagation(); setDeleteTarget(contact); }}><Trash2 size={14} className="text-red-500" /></IconButton>}
@@ -149,8 +153,8 @@ const Nucleacao: React.FC = () => {
     action={<Button onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard></PageWrapper>;
 
   return (
-    <PageWrapper>
-      <div className="space-y-4">
+    <PageWrapper className="nucleation-directory">
+      <div className="min-w-0 space-y-4">
         <SectionTitle title="Nucleação" icon={PhoneCall} description="Acompanhamento de contatos, grupos e conversão em MFCista."
           action={canCreate ? <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<UsersRound size={14} />} onClick={() => setShowGroupModal(true)}>Novo grupo</Button><Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button></div> : undefined} />
 
@@ -163,9 +167,9 @@ const Nucleacao: React.FC = () => {
 
         <FilterLine>
           <FilterLineSection grow>
-            <FilterLineItem><FilterLineSegmented<string> value={groupView} onChange={setGroupView} options={[{ value: 'geral', label: `Geral (${contacts.length})` }, ...groups.map(group => ({ value: group.id, label: `${group.name} (${group.contactsCount})` }))]} /></FilterLineItem>
+            <FilterLineItem className="min-w-0 sm:w-64"><Select aria-label="Grupo de nucleação" value={groupView} onChange={event => setGroupView(event.target.value)} options={[{ value: 'geral', label: `Geral — ${contacts.length} contatos` }, ...groups.map(group => ({ value: group.id, label: `${group.name} (${group.contactsCount || 0})` }))]} /></FilterLineItem>
             <FilterLineItem grow><FilterLineSearch aria-label="Buscar contato" value={search} onChange={setSearch} placeholder="Nome ou telefone…" /></FilterLineItem>
-            <FilterLineItem><FilterLineSegmented<string> value={statusFilter} onChange={setStatusFilter}
+            <FilterLineItem><FilterLineSegmented<string> className="nucleation-status-filter" value={statusFilter} onChange={setStatusFilter}
               options={[{ value: 'Todos', label: 'Todos' }, { value: 'Pendente', label: 'Pendentes' }, { value: 'Em Andamento', label: 'Em andamento' }, { value: 'Convertido', label: 'Convertidos' }]} /></FilterLineItem>
           </FilterLineSection>
           <FilterLineSection align="right">
@@ -181,12 +185,18 @@ const Nucleacao: React.FC = () => {
           </div>
         </PanelCard>}
 
-        <ContentCard padding="none">
-          <GridTable columns={columns} data={paginatedData} keyExtractor={contact => contact.id} onRowClick={open} noDesktopCard
+        <div className="min-w-0">
+          <GridTable columns={columns} data={paginatedData} keyExtractor={contact => contact.id} onRowClick={open} mobileBreakpoint="xl" tableMinWidth={880}
+            renderMobileItem={contact => <div className="member-mobile-card">
+              <div className="member-mobile-heading"><div className="min-w-0 flex-1">{columns[0].render?.(contact)}</div>{columns[2].render?.(contact)}</div>
+              <div className="nucleation-mobile-phones">{columns[1].render?.(contact)}</div>
+              <p className="mb-3 text-xs text-slate-600 [overflow-wrap:anywhere]">Grupo: {contact.groupName || groups.find(group => group.id === contact.groupId)?.name || 'Sem grupo'}</p>
+              <div className="border-t border-slate-100 pt-3">{columns[columns.length - 1].render?.(contact)}</div>
+            </div>}
             emptyMessage={<EmptyState icon={PhoneCall} title="Nenhum contato encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Casais confirmados no Encontro de Noivos podem ser enviados para cá.'}
               action={!hasFilter && canCreate ? <Button size="sm" onClick={() => setShowNewModal(true)}>Novo contato</Button> : undefined} />}
             pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
-        </ContentCard>
+        </div>
       </div>
 
       <NucleationContactModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} onCreated={created => setContacts(prev => [created, ...prev])} />
