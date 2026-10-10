@@ -17,7 +17,7 @@ document.querySelectorAll('.footer').forEach(footer=>{footer.innerHTML=`
     <div class="footer-top footer-content">
       <div class="footer-brand"><a class="footer-logo" href="index.html"><img src="mfc-logo.png" alt="MFC de Tatuí"><span>Movimento<br><strong>Familiar Cristão</strong></span></a><p>Uma comunidade de fé, acolhida e serviço que aproxima famílias em Tatuí.</p><a class="footer-instagram" href="https://www.instagram.com/mfctatui/" target="_blank" rel="noopener noreferrer"><b>◎</b> @mfctatui <span>↗</span></a></div>
       <div class="footer-column"><h4>Conheça</h4><a href="mfc-tatui.html">O MFC</a><a href="historias.html">Histórias e fotos</a><a href="eventos.html">Agenda de encontros</a></div>
-      <div class="footer-column"><h4>Participar</h4><a href="eventos.html#eventos-abertos">Inscrições abertas</a><a href="contato.html">Fale com a equipe</a><a href="mailto:contato@mfctatui.org.br">Enviar e-mail</a></div>
+      <div class="footer-column"><h4>Participar</h4><a href="eventos.html#eventos-abertos">Inscrições abertas</a><a href="contato.html">Fale com a equipe</a><a href="mailto:contato@mfctatui.com.br">Enviar e-mail</a></div>
     </div>
     <div class="footer-bottom"><span>© ${new Date().getFullYear()} MFC de Tatuí · Desde 1965</span><span>Famílias evangelizando famílias.</span><a class="developer-credit" href="https://develoi.com.br" target="_blank" rel="noreferrer">Desenvolvido por <strong>Develoi Soluções Digitais</strong><i>↗</i></a></div>
   </div>`});
@@ -40,7 +40,14 @@ if(openEvents||homeEvents){
   const appUrl=window.MFC_APP_URL||(isLocalPortal?'http://localhost:3000':window.location.origin);
   const escapeHtml=value=>String(value||'').replace(/[&<>'"]/g,char=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
   const formatDate=value=>{if(!value)return 'Data a confirmar';const [year,month,day]=value.slice(0,10).split('-');return `${day}/${month}/${year}`};
+  const eventSchema=events=>{
+    document.getElementById('events-jsonld')?.remove();
+    const items=events.filter(e=>e.date).map(e=>({"@context":"https://schema.org","@type":"Event","name":e.name,"startDate":e.date.slice(0,10)+(e.startTime?`T${e.startTime}`:''),"eventStatus":"https://schema.org/EventScheduled","eventAttendanceMode":"https://schema.org/OfflineEventAttendanceMode","description":e.description||undefined,"location":{"@type":"Place","name":e.location||'Tatuí • SP',"address":{"@type":"PostalAddress","addressLocality":"Tatuí","addressRegion":"SP","addressCountry":"BR"}},"organizer":{"@type":"Organization","name":"Movimento Familiar Cristão de Tatuí","url":window.location.origin+'/site/'},"offers":{"@type":"Offer","url":`${appUrl}/eventos/inscricao/${encodeURIComponent(e.publicToken)}`,"availability":"https://schema.org/InStock"}}));
+    if(!items.length)return;
+    const tag=document.createElement('script');tag.type='application/ld+json';tag.id='events-jsonld';tag.textContent=JSON.stringify(items);document.head.appendChild(tag);
+  };
   const renderEvents=events=>{
+    eventSchema(events);
     if(!events.length){eventsTarget.innerHTML=openEvents?'<div class="agenda-empty"><span>✦</span><h3>Nenhuma inscrição aberta neste momento.</h3><p>Em breve teremos novos encontros. Volte para conferir a agenda.</p></div>':'<a class="event-card solid" href="eventos.html"><div><div class="event-type">Agenda</div><h3>Novos encontros em breve</h3></div><div><div class="date">Acompanhe a agenda</div><span class="arrow">↗</span></div></a>';return}
     if(!openEvents){eventsTarget.innerHTML=events.slice(0,3).map((event,index)=>{const formLink=`${appUrl}/eventos/inscricao/${encodeURIComponent(event.publicToken)}`;return `<a class="event-card ${index===0?'featured':index===1?'solid':'light'}" href="${formLink}" target="_blank" rel="noopener noreferrer" aria-label="Inscrever-se em ${escapeHtml(event.name)} em nova aba"><div><div class="event-type">${event.bridal?'Encontro de noivos':'Inscrição aberta'}</div><h3>${escapeHtml(event.name)}</h3></div><div><div class="date">${formatDate(event.date)}${event.startTime?` • ${event.startTime}`:''}</div><span class="arrow">↗</span></div></a>`}).join('');return}
     eventsTarget.innerHTML=events.map((event,index)=>{

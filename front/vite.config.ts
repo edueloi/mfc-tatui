@@ -26,6 +26,8 @@ function mfcSite(): Plugin {
         if (!target.startsWith(SITE_DIR + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) return next();
         res.setHeader('Content-Type', MIME[path.extname(target).toLowerCase()] || 'application/octet-stream');
         res.setHeader('Cache-Control', 'no-cache');
+        // As páginas usam %SITE_URL% (canonical, og:url...); em produção o backend troca, aqui usamos o host do dev server.
+        if (target.endsWith('.html')) { res.end(fs.readFileSync(target, 'utf8').replace(/%SITE_URL%/g, `http://${req.headers.host}`)); return; }
         fs.createReadStream(target).pipe(res);
       });
     },

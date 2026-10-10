@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "MFC Tatuí",
+  "short_name": "MFC Tatuí",
+  "description": "Sistema de gestão do Movimento Familiar Cristão de Tatuí: eventos, equipes, mfcistas e financeiro.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/entrar?utm_source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#02186e",
+  "theme_color": "#0622aa",
+  "categories": ["productivity", "business", "lifestyle"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Eventos", "url": "/eventos", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Agenda pública", "url": "/site/eventos.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -98,3 +98,10 @@ O sistema é totalmente responsivo:
 ### Aba na URL
 
 Telas com abas guardam a aba em `?aba=<id>` (ex.: `/mfcistas/<id>?aba=saude`, `/?aba=aniversarios`, `/financeiro/<equipe>?aba=recebimentos`). A aba padrão não aparece na URL.
+
+### SEO
+
+- O site público (`/site/`) tem título, descrição, canonical, Open Graph/Twitter e JSON-LD (Organization, WebSite, BreadcrumbList, BookStore, Event das inscrições abertas) em cada página. As páginas usam `%SITE_URL%`, trocado pelo backend em tempo de resposta.
+- Defina `SITE_URL` no `.env` do backend (ex.: `https://mfctatui.com.br`); sem ela, usa o host da requisição.
+- `/robots.txt` e `/sitemap.xml` são gerados pelo backend. O sistema (login, painel e formulários públicos) responde com `X-Robots-Tag: noindex`; a raiz `/` aponta o canonical para `/site/`.
+- `sobre.html` e `sistema.html` ficam `noindex`. Ao criar uma página nova no site, adicione-a em `SITE_PAGES` no `back/src/server.js`.

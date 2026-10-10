@@ -15,3 +15,8 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// PWA: registra o service worker só em produção (em desenvolvimento ele atrapalharia o hot reload).
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}

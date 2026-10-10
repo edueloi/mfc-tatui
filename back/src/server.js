@@ -3,6 +3,7 @@
  * Servidor principal com rotas organizadas por módulos
  */
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
@@ -36,7 +37,8 @@ app.use(express.urlencoded({ extended: true, charset: 'utf-8' }));
 // Garantir UTF-8 em todas as respostas
 app.use((req, res, next) => {
   // Arquivos estáticos precisam conservar seu tipo correto (CSS, PNG, fontes etc.).
-  if (!req.path.startsWith('/site/') && !req.path.startsWith('/uploads/') && !req.path.startsWith('/images/')) {
+  if (!req.path.startsWith('/site/') && !req.path.startsWith('/uploads/') && !req.path.startsWith('/images/') &&
+      !req.path.startsWith('/assets/') && !req.path.startsWith('/icons/') && req.path !== '/sw.js' && req.path !== '/favicon.ico' && req.path !== '/manifest.webmanifest') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
   }
   next();
@@ -79,11 +81,68 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
 // Servir o front buildado (produção / VPS)
 const publicSitePath = path.join(__dirname, '../../sites/mfc-encontros/dist');
 app.use('/images', express.static(path.join(__dirname, '../../images')));
-app.use('/site', express.static(publicSitePath));
+
+// SEO: endereço público do site. Defina SITE_URL no .env (ex.: https://mfctatui.com.br); sem ela, usa o host da requisição.
+const siteUrl = (req) => {
+  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim();
+  return `${proto}://${req.get('host')}`;
+};
+// Páginas indexáveis do site (fora sobre.html e sistema.html, que são noindex).
+const SITE_PAGES = [
+  { file: '', priority: '1.0', changefreq: 'weekly' },
+  { file: 'eventos.html', priority: '0.9', changefreq: 'daily' },
+  { file: 'historias.html', priority: '0.7', changefreq: 'weekly' },
+  { file: 'mfc-tatui.html', priority: '0.8', changefreq: 'monthly' },
+  { file: 'contato.html', priority: '0.7', changefreq: 'yearly' },
+];
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(
+    `User-agent: *
+Allow: /site/
+Disallow: /entrar
+Disallow: /eventos/inscricao/
+Disallow: /noivos/
+Disallow: /uploads/
+
+Sitemap: ${siteUrl(req)}/sitemap.xml
+`
+  );
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteUrl(req);
+  const urls = SITE_PAGES.map((p) => {
+    const lastmod = p.file ? fs.statSync(path.join(publicSitePath, p.file)).mtime : fs.statSync(path.join(publicSitePath, 'index.html')).mtime;
+    return `  <url><loc>${base}/site/${p.file}</loc><lastmod>${lastmod.toISOString().slice(0, 10)}</lastmod><changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>`;
+  }).join('\n');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>
+`);
+});
+
+// Páginas do site: troca %SITE_URL% (canonical, og:url, dados estruturados) pelo endereço público.
+app.get(/^\/site\/(?:([\w-]+\.html))?$/, (req, res, next) => {
+  const file = path.join(publicSitePath, req.params[0] || 'index.html');
+  fs.readFile(file, 'utf8', (err, html) => {
+    if (err) return next();
+    res.set('Cache-Control', 'no-cache').type('html').send(html.replace(/%SITE_URL%/g, siteUrl(req)));
+  });
+});
+app.use('/site', express.static(publicSitePath, {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => { if (/\.(?:html|js|css)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache'); },
+}));
 const frontDistPath = path.join(__dirname, '../../front/dist');
-app.use(express.static(frontDistPath));
+app.use(express.static(frontDistPath, { index: false }));
 // Só é API quando o caminho é exatamente a raiz (ou começa com ela + "/"): antes "/configuracoes" era tratado como "/config" e dava erro ao atualizar a página.
 app.get(/^(?!\/(?:auth|cities|teams|roles|members|member-photos|users|events|dashboard|config|api|daily-entries|bridal-couples|bridal-meetings|nucleation|blog|payments|event-sales|ledger|ledger-entities|uploads|health)(?:[/?]|$)).*/, (req, res) => {
+  // O sistema (painel, login, formulários) não deve aparecer no Google; a raiz aponta para o site público.
+  if (req.path === '/') res.set('Link', '</site/>; rel="canonical"');
+  else res.set('X-Robots-Tag', 'noindex, nofollow');
   res.sendFile(path.join(frontDistPath, 'index.html'));
 });
 
