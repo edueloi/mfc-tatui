@@ -143,6 +143,8 @@ app.get(/^(?!\/(?:auth|cities|teams|roles|members|member-photos|users|events|das
   // O sistema (painel, login, formulários) não deve aparecer no Google; a raiz aponta para o site público.
   if (req.path === '/') res.set('Link', '</site/>; rel="canonical"');
   else res.set('X-Robots-Tag', 'noindex, nofollow');
+  // O middleware global força JSON; o index.html do front precisa sair como HTML.
+  res.type('html');
   res.sendFile(path.join(frontDistPath, 'index.html'));
 });
 
