@@ -37,7 +37,7 @@ app.use(express.urlencoded({ extended: true, charset: 'utf-8' }));
 // Garantir UTF-8 em todas as respostas
 app.use((req, res, next) => {
   // Arquivos estáticos precisam conservar seu tipo correto (CSS, PNG, fontes etc.).
-  if (!req.path.startsWith('/site/') && !req.path.startsWith('/uploads/') && !req.path.startsWith('/images/') &&
+  if (!req.path.startsWith('/site/') && !req.path.startsWith('/uploads/') && !req.path.startsWith('/images/') && !req.path.startsWith('/imgs/') &&
       !req.path.startsWith('/assets/') && !req.path.startsWith('/icons/') && req.path !== '/sw.js' && req.path !== '/favicon.ico' && req.path !== '/manifest.webmanifest') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
   }
@@ -81,6 +81,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
 // Servir o front buildado (produção / VPS)
 const publicSitePath = path.join(__dirname, '../../sites/mfc-encontros/dist');
 app.use('/images', express.static(path.join(__dirname, '../../images')));
+app.use('/imgs', express.static(path.join(__dirname, '../../front/imgs')));
 
 // SEO: endereço público do site. Defina SITE_URL no .env (ex.: https://mfctatui.com.br); sem ela, usa o host da requisição.
 const siteUrl = (req) => {
