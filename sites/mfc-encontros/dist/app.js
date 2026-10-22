@@ -17,7 +17,7 @@ document.querySelectorAll('.footer').forEach(footer=>{footer.innerHTML=`
     <div class="footer-top footer-content">
       <div class="footer-brand"><a class="footer-logo" href="index.html"><img src="mfc-logo.png" alt="MFC de Tatuí"><span>Movimento<br><strong>Familiar Cristão</strong></span></a><p>Uma comunidade de fé, acolhida e serviço que aproxima famílias em Tatuí.</p><a class="footer-instagram" href="https://www.instagram.com/mfctatui/" target="_blank" rel="noopener noreferrer"><b>◎</b> @mfctatui <span>↗</span></a></div>
       <div class="footer-column"><h4>Conheça</h4><a href="mfc-tatui.html">O MFC</a><a href="historias.html">Histórias e fotos</a><a href="eventos.html">Agenda de encontros</a></div>
-      <div class="footer-column"><h4>Participar</h4><a href="eventos.html#eventos-abertos">Inscrições abertas</a><a href="contato.html">Fale com a equipe</a><a href="mailto:contato@mfctatui.com.br">Enviar e-mail</a></div>
+      <div class="footer-column"><h4>Participar</h4><a href="eventos.html#eventos-abertos">Inscrições abertas</a><a href="contato.html">Fale com a equipe</a><a href="mailto:contato@mfctatui.org">Enviar e-mail</a></div>
     </div>
     <div class="footer-bottom"><span>© ${new Date().getFullYear()} MFC de Tatuí · Desde 1965</span><span>Famílias evangelizando famílias.</span><a class="developer-credit" href="https://develoi.com.br" target="_blank" rel="noreferrer">Desenvolvido por <strong>Develoi Soluções Digitais</strong><i>↗</i></a></div>
   </div>`});
