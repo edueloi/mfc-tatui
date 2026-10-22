@@ -1,7 +1,7 @@
 const isLocalPortal=['localhost','127.0.0.1'].includes(window.location.hostname);
 // Servido junto com o sistema (em /site/): o botão leva à tela de login do sistema, na mesma porta.
 const servedWithSystem=window.location.pathname.startsWith('/site/');
-const systemUrl=servedWithSystem?'/entrar':(isLocalPortal?'http://localhost:3000/entrar':null);
+const systemUrl=/^(www\.)?mfctatui\.org$/.test(window.location.hostname)?'https://painel.mfctatui.org/entrar':servedWithSystem?'/entrar':(isLocalPortal?'http://localhost:3000/entrar':null);
 document.querySelector('.announcement')?.remove();
 document.querySelector('.mobile-toggle')?.addEventListener('click',()=>document.querySelector('.nav-links').classList.toggle('open'));
 document.querySelectorAll('.nav > .small-btn').forEach(button=>{button.href=systemUrl||'sistema.html';button.innerHTML='Área do sistema <span>→</span>'});

@@ -102,6 +102,15 @@ Telas com abas guardam a aba em `?aba=<id>` (ex.: `/mfcistas/<id>?aba=saude`, `/
 ### SEO
 
 - O site público (`/site/`) tem título, descrição, canonical, Open Graph/Twitter e JSON-LD (Organization, WebSite, BreadcrumbList, BookStore, Event das inscrições abertas) em cada página. As páginas usam `%SITE_URL%`, trocado pelo backend em tempo de resposta.
-- Defina `SITE_URL` no `.env` do backend (ex.: `https://mfctatui.com.br`); sem ela, usa o host da requisição.
+- Defina `SITE_URL` e `PAINEL_URL` no `.env` do backend (`https://mfctatui.org` e `https://painel.mfctatui.org`); sem elas, usa o host da requisição e o site fica em `/site/`.
 - `/robots.txt` e `/sitemap.xml` são gerados pelo backend. O sistema (login, painel e formulários públicos) responde com `X-Robots-Tag: noindex`; a raiz `/` aponta o canonical para `/site/`.
 - `sobre.html` e `sistema.html` ficam `noindex`. Ao criar uma página nova no site, adicione-a em `SITE_PAGES` no `back/src/server.js`.
+
+### Domínios em produção
+
+| Endereço | O que serve |
+|----------|-------------|
+| `mfctatui.org` (e `www.`) | Site público na raiz (`/`, `/eventos.html`...) e formulários sem login (`/eventos/inscricao/:token`, `/noivos/form/:token`). `/site/...` redireciona (301) para a raiz; qualquer outra rota do sistema redireciona para o painel |
+| `painel.mfctatui.org` | Sistema (login em `/entrar`), `noindex`, `robots.txt` bloqueando tudo. É daqui que se instala o app (PWA) |
+
+Os links de inscrição copiados no painel (`front/utils/siteUrls.ts`) saem sempre com `mfctatui.org`.

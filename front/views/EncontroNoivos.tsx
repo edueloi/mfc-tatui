@@ -14,6 +14,7 @@ import { BridalMeetingModal } from '../components/BridalMeetingModal';
 import { BridalMeetingInviteModal } from '../components/BridalMeetingInviteModal';
 import { usePermission } from '../src/hooks/usePermission';
 import { dateLabel } from '../utils/dates';
+import { publicOrigin } from '../utils/siteUrls';
 import { meetingStatus, CLOSE_AFTER_DAYS } from '../utils/meetingStatus';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
 import { BRIDAL_BASE, SEM_ENCONTRO, couplePath, findMeeting, meetingPath } from '../utils/bridalPaths';
@@ -149,7 +150,7 @@ const EncontroNoivos: React.FC = () => {
 
   const copyPublicLink = async (token: string) => {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/noivos/form/${token}`);
+      await navigator.clipboard.writeText(`${publicOrigin()}/noivos/form/${token}`);
       toast.success('Link copiado.');
     } catch { toast.error('Não foi possível copiar. Copie o endereço manualmente.'); }
   };

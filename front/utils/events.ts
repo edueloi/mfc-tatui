@@ -1,6 +1,7 @@
 import type { Event, EventItem, EventRegistration, UserRoleType } from '../types';
 import { entitySlug, findBySlug } from './entitySlug';
 import { dateLabel } from './dates';
+import { publicOrigin } from './siteUrls';
 
 export const EVENTS_BASE = '/eventos';
 
@@ -119,7 +120,7 @@ export function inviteMessage(event: Pick<Event, 'name' | 'date' | 'startTime' |
   return `${recipient ? `Olá, ${recipient.trim().split(/\s+/)[0]}! ` : 'Olá! '}Você está convidado(a) para o evento "${event.name}" do MFC, em ${when}${event.location ? `, no local: ${event.location}` : ''}.${fee} Faça sua inscrição pelo link: ${link} 🙏`;
 }
 
-export const publicEventLink = (token: string) => `${window.location.origin}${EVENTS_BASE}/inscricao/${token}`;
+export const publicEventLink = (token: string) => `${publicOrigin()}${EVENTS_BASE}/inscricao/${token}`;
 export const internalEventLink = (path: string) => `${window.location.origin}${path}`;
 
 /* ───────────── Resumo de itens ───────────── */

@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+// Em produção a API responde no mesmo endereço do sistema (painel.<domínio>, domínio principal ou o host antigo), então sem VITE_API_URL usa a origem atual.
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:4000');
 
 export const photoSrc = (value?: string) => value?.startsWith('/uploads/')
   ? `${API_URL.replace(/\/$/, '')}${value}`

@@ -83,9 +83,20 @@ const publicSitePath = path.join(__dirname, '../../sites/mfc-encontros/dist');
 app.use('/images', express.static(path.join(__dirname, '../../images')));
 app.use('/imgs', express.static(path.join(__dirname, '../../front/imgs')));
 
-// SEO: endereço público do site. Defina SITE_URL no .env (ex.: https://mfctatui.com.br); sem ela, usa o host da requisição.
+// Domínios: SITE_URL = site e links públicos (ex.: https://mfctatui.org); PAINEL_URL = sistema com login (ex.: https://painel.mfctatui.org).
+// Sem SITE_URL (desenvolvimento ou outro host), tudo continua junto e o site fica em /site/.
+const stripSlash = (v) => String(v || '').replace(/\/+$/, '');
+const hostOf = (url) => { try { return new URL(url).host.toLowerCase(); } catch { return ''; } };
+const PUBLIC_HOST = hostOf(process.env.SITE_URL);
+const PANEL_HOST = hostOf(process.env.PAINEL_URL);
+const hostKind = (req) => {
+  const h = String(req.headers.host || '').toLowerCase();
+  if (PANEL_HOST && h === PANEL_HOST) return 'panel';
+  if (PUBLIC_HOST && (h === PUBLIC_HOST || h === `www.${PUBLIC_HOST}`)) return 'public';
+  return 'other';
+};
 const siteUrl = (req) => {
-  if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
+  if (process.env.SITE_URL) return stripSlash(process.env.SITE_URL);
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim();
   return `${proto}://${req.get('host')}`;
 };
@@ -97,11 +108,15 @@ const SITE_PAGES = [
   { file: 'mfc-tatui.html', priority: '0.8', changefreq: 'monthly' },
   { file: 'contato.html', priority: '0.7', changefreq: 'yearly' },
 ];
+// Formulários públicos (sem login) que podem abrir no domínio principal.
+const PUBLIC_APP_ROUTE = /^\/(?:eventos\/inscricao|noivos\/form)\//;
 
 app.get('/robots.txt', (req, res) => {
+  if (hostKind(req) === 'panel') return res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+  const root = hostKind(req) === 'public' ? '/' : '/site/';
   res.type('text/plain').send(
     `User-agent: *
-Allow: /site/
+Allow: ${root}
 Disallow: /entrar
 Disallow: /eventos/inscricao/
 Disallow: /noivos/
@@ -114,9 +129,10 @@ Sitemap: ${siteUrl(req)}/sitemap.xml
 
 app.get('/sitemap.xml', (req, res) => {
   const base = siteUrl(req);
+  const prefix = hostKind(req) === 'public' ? '/' : '/site/';
   const urls = SITE_PAGES.map((p) => {
-    const lastmod = p.file ? fs.statSync(path.join(publicSitePath, p.file)).mtime : fs.statSync(path.join(publicSitePath, 'index.html')).mtime;
-    return `  <url><loc>${base}/site/${p.file}</loc><lastmod>${lastmod.toISOString().slice(0, 10)}</lastmod><changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>`;
+    const lastmod = fs.statSync(path.join(publicSitePath, p.file || 'index.html')).mtime;
+    return `  <url><loc>${base}${prefix}${p.file}</loc><lastmod>${lastmod.toISOString().slice(0, 10)}</lastmod><changefreq>${p.changefreq}</changefreq><priority>${p.priority}</priority></url>`;
   }).join('\n');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -126,23 +142,43 @@ ${urls}
 });
 
 // Páginas do site: troca %SITE_URL% (canonical, og:url, dados estruturados) pelo endereço público.
-app.get(/^\/site\/(?:([\w-]+\.html))?$/, (req, res, next) => {
-  const file = path.join(publicSitePath, req.params[0] || 'index.html');
-  fs.readFile(file, 'utf8', (err, html) => {
+// No domínio principal o site fica na raiz (/, /eventos.html...); /site/... só existe nos outros hosts.
+const sendSitePage = (req, res, next, name) => {
+  fs.readFile(path.join(publicSitePath, name || 'index.html'), 'utf8', (err, html) => {
     if (err) return next();
-    res.set('Cache-Control', 'no-cache').type('html').send(html.replace(/%SITE_URL%/g, siteUrl(req)));
+    const base = siteUrl(req);
+    const out = hostKind(req) === 'public' ? html.replace(/%SITE_URL%\/site\//g, `${base}/`) : html;
+    res.set('Cache-Control', 'no-cache').type('html').send(out.replace(/%SITE_URL%/g, base));
   });
-});
-app.use('/site', express.static(publicSitePath, {
+};
+const siteStatic = express.static(publicSitePath, {
+  index: false,
   maxAge: '7d',
   setHeaders: (res, filePath) => { if (/\.(?:html|js|css)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache'); },
-}));
+});
+app.use((req, res, next) => {
+  if (hostKind(req) !== 'public') return next();
+  const m = req.path.match(/^\/(?:([\w-]+)\.html)?$/);
+  if (req.path.startsWith('/site/') || req.path === '/site') {
+    const rest = req.path.replace(/^\/site\/?/, '');
+    return res.redirect(301, `/${rest === 'index.html' ? '' : rest}`);
+  }
+  if (req.path === '/index.html') return res.redirect(301, '/');
+  if (m && req.method === 'GET') return sendSitePage(req, res, next, m[1] ? `${m[1]}.html` : '');
+  res.removeHeader('Content-Type'); // o middleware global força JSON; o arquivo estático define o tipo certo
+  return siteStatic(req, res, next);
+});
+app.get(/^\/site\/(?:([\w-]+\.html))?$/, (req, res, next) => sendSitePage(req, res, next, req.params[0]));
+app.use('/site', siteStatic);
 const frontDistPath = path.join(__dirname, '../../front/dist');
 app.use(express.static(frontDistPath, { index: false }));
 // Só é API quando o caminho é exatamente a raiz (ou começa com ela + "/"): antes "/configuracoes" era tratado como "/config" e dava erro ao atualizar a página.
 app.get(/^(?!\/(?:auth|cities|teams|roles|members|member-photos|users|events|dashboard|config|api|daily-entries|bridal-couples|bridal-meetings|nucleation|blog|payments|event-sales|ledger|ledger-entities|uploads|health)(?:[/?]|$)).*/, (req, res) => {
-  // O sistema (painel, login, formulários) não deve aparecer no Google; a raiz aponta para o site público.
-  if (req.path === '/') res.set('Link', '</site/>; rel="canonical"');
+  const kind = hostKind(req);
+  // Domínio principal só serve o site e os formulários públicos; o resto do sistema vive no painel.
+  if (kind === 'public' && !PUBLIC_APP_ROUTE.test(req.path)) return res.redirect(302, `${stripSlash(process.env.PAINEL_URL) || ''}${req.originalUrl}`);
+  // O sistema (painel, login, formulários) não deve aparecer no Google; em hosts sem domínio próprio a raiz aponta para o site.
+  if (kind === 'other' && req.path === '/') res.set('Link', '</site/>; rel="canonical"');
   else res.set('X-Robots-Tag', 'noindex, nofollow');
   // O middleware global força JSON; o index.html do front precisa sair como HTML.
   res.type('html');

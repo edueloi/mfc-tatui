@@ -7,6 +7,7 @@ import { BridalCouple, BridalMeeting } from '../types';
 import { PageWrapper, ContentCard, Button, Badge, EmptyState } from '../components/ui';
 import { BridalCoupleForm, BridalCoupleFormData } from '../components/BridalCoupleForm';
 import { dateLabel } from '../utils/dates';
+import { publicOrigin } from '../utils/siteUrls';
 import { BRIDAL_BASE, couplePath, findCouple, meetingPath } from '../utils/bridalPaths';
 
 const BridalCoupleDetail: React.FC = () => {
@@ -78,7 +79,7 @@ const BridalCoupleDetail: React.FC = () => {
 
   const copyPublicLink = async () => {
     if (!couple) return;
-    try { await navigator.clipboard.writeText(`${window.location.origin}/noivos/form/${couple.publicToken}`); toast.success('Link copiado.'); }
+    try { await navigator.clipboard.writeText(`${publicOrigin()}/noivos/form/${couple.publicToken}`); toast.success('Link copiado.'); }
     catch { toast.error('Não foi possível copiar. Copie o endereço manualmente.'); }
   };
 

@@ -10,6 +10,7 @@ import MemberProfile from './views/MemberProfile';
 import MemberFormPage from './views/MemberFormPage';
 import SettingsView from './views/Settings';
 import UserManagement from './views/UserManagement';
+import { isPanelHost, publicSiteUrl } from './utils/siteUrls';
 import MyTeamView from './views/MyTeam';
 import FinanceView from './views/Finance';
 import GeneralLedger from './views/GeneralLedger';
@@ -42,8 +43,9 @@ const readStoredUser = (): UserType | null => {
 /** Sem login: a página inicial é o site público (/site/); qualquer outro endereço vai para o login e volta depois. */
 const EntryRedirect: React.FC = () => {
   const location = useLocation();
-  useEffect(() => { if (location.pathname === '/') window.location.replace('/site/'); }, [location.pathname]);
-  if (location.pathname === '/') return null;
+  // No painel.<domínio> a raiz é o login; nos demais endereços, a raiz é o site público.
+  useEffect(() => { if (location.pathname === '/' && !isPanelHost()) window.location.replace(publicSiteUrl()); }, [location.pathname]);
+  if (location.pathname === '/' && !isPanelHost()) return null;
   return <Navigate to={`/entrar?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
 };
 
@@ -62,7 +64,7 @@ const App: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('mfc.currentUser');
     setCurrentUser(null);
-    window.location.replace('/site/');
+    window.location.replace(publicSiteUrl());
   };
 
   return (
