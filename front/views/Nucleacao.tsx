@@ -199,7 +199,7 @@ const Nucleacao: React.FC = () => {
         </div>
       </div>
 
-      <NucleationContactModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} onCreated={created => setContacts(prev => [created, ...prev])} />
+      <NucleationContactModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} groups={groups} onCreated={created => setContacts(prev => [created, ...prev])} />
 
       <Modal isOpen={showGroupModal} onClose={() => !savingGroup && setShowGroupModal(false)} title="Novo grupo de nucleação" size="sm" footer={<ModalFooter><Button variant="ghost" size="sm" disabled={savingGroup} onClick={() => setShowGroupModal(false)}>Cancelar</Button><Button size="sm" loading={savingGroup} onClick={createGroup}>Criar grupo</Button></ModalFooter>}>
         <div className="space-y-3"><Input label="Nome do grupo" value={groupName} onChange={event => setGroupName(event.target.value)} placeholder="Ex.: Grupo São José" /><Input label="Descrição (opcional)" value={groupDescription} onChange={event => setGroupDescription(event.target.value)} placeholder="Objetivo ou responsáveis" /></div>

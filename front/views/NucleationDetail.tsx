@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Phone, UserPlus, Heart, MessageCircle, Trash2, CheckCircle2, XCircle, Clock, History, ClipboardList, Loader2, PhoneCall, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Pencil, Phone, UserPlus, Heart, MessageCircle, Trash2, CheckCircle2, XCircle, Clock, History, ClipboardList, Loader2, PhoneCall, ExternalLink } from 'lucide-react';
 import { api } from '../api';
 import { NucleationAttempt, NucleationContact, NucleationGroup, User as UserType } from '../types';
 import { PageWrapper, ContentCard, PanelCard, Button, Badge, EmptyState, ConfirmModal, DetailField, Tabs, DatePicker, Select, Input } from '../components/ui';
+import { NucleationContactModal } from '../components/NucleationContactModal';
 import { usePermission } from '../src/hooks/usePermission';
 import { maskPhone } from '../utils/masks';
 import { dateLabel } from '../utils/dates';
@@ -44,6 +45,7 @@ const NucleationDetail: React.FC = () => {
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [savingGroup, setSavingGroup] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +161,7 @@ const NucleationDetail: React.FC = () => {
           <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate(NUCLEATION_BASE)}>Voltar para Nucleação</Button>
           <div className="flex flex-wrap gap-2">
             {converted && contact.convertedMemberId && <Button variant="outline" size="sm" iconLeft={<ExternalLink size={14} />} onClick={() => navigate(`/mfcistas/${contact.convertedMemberId}`)}>Ver MFCista</Button>}
+            {canEdit && <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={() => setShowEdit(true)}>Editar</Button>}
             {canEdit && !converted && <Button size="sm" iconLeft={<UserPlus size={14} />} onClick={() => setShowConvert(true)}>Converter em MFCista</Button>}
             {canDelete && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={() => setShowDelete(true)}>Excluir</Button>}
           </div>
@@ -228,18 +231,36 @@ const NucleationDetail: React.FC = () => {
               options={[{ value: '', label: 'Sem grupo' }, ...groups.map(group => ({ value: group.id, label: group.name }))]} /></div>}
             <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
               <DetailField label="Nome" value={contact.name} />
-              <DetailField label="Telefone 1" value={maskPhone(contact.phone1 || '')} />
-              <DetailField label="Telefone 2" value={maskPhone(contact.phone2 || '')} />
+              <DetailField label="Noivo" value={contact.noivoName || '—'} />
+              <DetailField label="Noiva" value={contact.noivaName || '—'} />
+              <DetailField label="Telefone 1 (noivo)" value={maskPhone(contact.phone1 || '')} />
+              <DetailField label="Telefone 2 (noiva)" value={maskPhone(contact.phone2 || '')} />
+              <DetailField label="E-mail do noivo" value={contact.noivoEmail || '—'} />
+              <DetailField label="E-mail da noiva" value={contact.noivaEmail || '—'} />
+              <DetailField label="Nascimento do noivo" value={contact.noivoDob ? dateLabel(contact.noivoDob) : '—'} />
+              <DetailField label="Nascimento da noiva" value={contact.noivaDob ? dateLabel(contact.noivaDob) : '—'} />
+              <DetailField label="Endereço" value={[contact.street, contact.number, contact.complement, contact.neighborhood].filter(Boolean).join(', ') || '—'} />
+              <DetailField label="Cidade / UF" value={[contact.city, contact.state].filter(Boolean).join(' / ') || '—'} />
+              <DetailField label="CEP" value={contact.zip || '—'} />
               <DetailField label="Status" value={contact.status} />
               <DetailField label="Grupo" value={groupName || 'Sem grupo'} />
               <DetailField label="Origem" value={origin ? `Encontro de Noivos (${origin})` : 'Cadastro manual'} />
               <DetailField label="Cadastrado em" value={dateLabel(contact.createdAt)} />
               <DetailField label="Última atualização" value={dateLabel(contact.updatedAt)} />
             </dl>
+            {contact.notes && <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-700">Observações</p><p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600">{contact.notes}</p></div>}
           </PanelCard>}
         </Tabs>
       </div>
 
+      <NucleationContactModal isOpen={showEdit} onClose={() => setShowEdit(false)} contact={contact} groups={groups}
+        onCreated={updated => {
+          const nextList = list.map(item => item.id === updated.id ? { ...item, ...updated } : item);
+          setContact(prev => prev ? { ...prev, ...updated, attempts: prev.attempts } : prev);
+          setList(nextList);
+          // O endereço usa o nome do contato: se mudou, acompanha para não cair em "não encontrado".
+          navigate({ pathname: contactPath({ id: updated.id, name: updated.name }, nextList), search: window.location.search }, { replace: true });
+        }} />
       <ConfirmModal isOpen={showConvert} onClose={() => setShowConvert(false)} onConfirm={convert} loading={converting} variant="primary"
         title="Converter em MFCista?" message={`${contact.name} será cadastrado como MFCista, sem equipe vinculada. Você poderá completar o cadastro depois.`} confirmLabel="Converter em MFCista" />
       <ConfirmModal isOpen={showDelete} onClose={() => setShowDelete(false)} onConfirm={remove} loading={deleting} variant="danger"

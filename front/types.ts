@@ -358,6 +358,11 @@ export interface NucleationContact {
   attempts?: NucleationAttempt[];
   coupleNoivoName?: string | null;
   coupleNoivaName?: string | null;
+  /** Cadastro manual do casal (igual ao de noivos). */
+  noivoName?: string; noivoEmail?: string; noivoDob?: string;
+  noivaName?: string; noivaEmail?: string; noivaDob?: string;
+  zip?: string; street?: string; number?: string; neighborhood?: string; complement?: string; city?: string; state?: string;
+  notes?: string;
 }
 
 export interface NucleationGroupHistory {

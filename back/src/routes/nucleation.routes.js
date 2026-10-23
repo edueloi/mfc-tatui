@@ -8,6 +8,23 @@ const { nowIso } = require('../utils/helpers');
 
 const router = express.Router();
 
+// Campos do cadastro de contato (casal + endereço + observações). O nome e os telefones continuam nas colunas antigas.
+const CONTACT_EXTRA_COLUMNS = [
+  ['noivo_name', 'VARCHAR(150)'], ['noivo_email', 'VARCHAR(150)'], ['noivo_dob', 'VARCHAR(10)'],
+  ['noiva_name', 'VARCHAR(150)'], ['noiva_email', 'VARCHAR(150)'], ['noiva_dob', 'VARCHAR(10)'],
+  ['zip', 'VARCHAR(9)'], ['street', 'VARCHAR(200)'], ['address_number', 'VARCHAR(20)'], ['neighborhood', 'VARCHAR(120)'],
+  ['complement', 'VARCHAR(120)'], ['city', 'VARCHAR(120)'], ['state', 'VARCHAR(2)'], ['notes', 'TEXT'],
+];
+const CONTACT_FIELDS = {
+  noivoName: 'noivo_name', noivoEmail: 'noivo_email', noivoDob: 'noivo_dob',
+  noivaName: 'noiva_name', noivaEmail: 'noiva_email', noivaDob: 'noiva_dob',
+  zip: 'zip', street: 'street', number: 'address_number', neighborhood: 'neighborhood',
+  complement: 'complement', city: 'city', state: 'state', notes: 'notes',
+};
+const text = (value, max) => String(value ?? '').trim().slice(0, max);
+const cleanField = (key, value) => key === 'state' ? text(value, 2).toUpperCase() : key === 'notes' ? text(value, 2000) : text(value, 200);
+const joinNames = (a, b) => [a, b].map(item => String(item || '').trim()).filter(Boolean).join(' & ');
+
 let nucleationGroupsReady;
 const ensureNucleationGroups = () => {
   if (!nucleationGroupsReady) nucleationGroupsReady = (async () => {
@@ -22,6 +39,11 @@ const ensureNucleationGroups = () => {
     const columns = await db.prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nucleation_contacts'").all();
     if (!columns.some(column => (column.COLUMN_NAME || column.column_name) === 'group_id')) {
       await db.prepare('ALTER TABLE nucleation_contacts ADD COLUMN group_id VARCHAR(36) NULL').run();
+    }
+    // Cadastro completo do casal (igual ao de noivo e noiva) e endereço.
+    const existing = new Set(columns.map(column => column.COLUMN_NAME || column.column_name));
+    for (const [name, type] of CONTACT_EXTRA_COLUMNS) {
+      if (!existing.has(name)) await db.prepare(`ALTER TABLE nucleation_contacts ADD COLUMN ${name} ${type} NULL`).run();
     }
   })().catch(error => { nucleationGroupsReady = undefined; throw error; });
   return nucleationGroupsReady;
@@ -148,18 +170,28 @@ router.post('/', async (req, res) => {
     const id = uuid();
     const ts = nowIso();
 
-    await db.prepare(`
-      INSERT INTO nucleation_contacts (id, couple_id, name, phone_1, phone_2, status, created_at, updated_at)
-      VALUES (@id, @coupleId, @name, @phone1, @phone2, @status, @createdAt, @updatedAt)
-    `).run({
+    const extra = {};
+    for (const [key, column] of Object.entries(CONTACT_FIELDS)) extra[column] = cleanField(key, data[key]);
+    const name = text(data.name, 150) || joinNames(extra.noivo_name, extra.noiva_name);
+    if (!name) return res.status(400).json({ error: 'Informe o nome do noivo ou da noiva.' });
+    let groupId = null;
+    if (data.groupId) {
+      const group = await db.prepare('SELECT id FROM nucleation_groups WHERE id = ?').get(data.groupId);
+      groupId = group ? group.id : null;
+    }
+
+    const columns = ['id', 'couple_id', 'name', 'phone_1', 'phone_2', 'status', 'group_id', 'created_at', 'updated_at', ...Object.keys(extra)];
+    await db.prepare(`INSERT INTO nucleation_contacts (${columns.join(', ')}) VALUES (${columns.map(column => '@' + column).join(', ')})`).run({
       id,
-      coupleId: data.coupleId || null,
-      name: data.name || '',
-      phone1: data.phone1 || '',
-      phone2: data.phone2 || '',
+      couple_id: data.coupleId || null,
+      name,
+      phone_1: data.phone1 || '',
+      phone_2: data.phone2 || '',
       status: data.status || 'Pendente',
-      createdAt: ts,
-      updatedAt: ts
+      group_id: groupId,
+      created_at: ts,
+      updated_at: ts,
+      ...extra
     });
 
     const contact = await loadContactFull(id);
@@ -176,18 +208,19 @@ router.put('/:id', async (req, res) => {
     const data = req.body || {};
     const ts = nowIso();
 
-    await db.prepare(`
-      UPDATE nucleation_contacts SET
-        name = @name, phone_1 = @phone1, phone_2 = @phone2, status = @status, updated_at = @updatedAt
-      WHERE id = @id
-    `).run({
-      id,
-      name: data.name || '',
-      phone1: data.phone1 || '',
-      phone2: data.phone2 || '',
-      status: data.status || 'Pendente',
-      updatedAt: ts
-    });
+    const current = await db.prepare('SELECT * FROM nucleation_contacts WHERE id = ?').get(id);
+    if (!current) return res.status(404).json({ error: 'Contato não encontrado.' });
+    // Só altera o que veio no corpo: telas antigas que enviam apenas nome/telefones não apagam o resto.
+    const has = key => Object.prototype.hasOwnProperty.call(data, key);
+    const sets = { updated_at: ts };
+    for (const [key, column] of Object.entries(CONTACT_FIELDS)) if (has(key)) sets[column] = cleanField(key, data[key]);
+    const noivoName = has('noivoName') ? sets.noivo_name : current.noivo_name;
+    const noivaName = has('noivaName') ? sets.noiva_name : current.noiva_name;
+    if (has('name') || has('noivoName') || has('noivaName')) sets.name = text(data.name, 150) || joinNames(noivoName, noivaName) || current.name;
+    if (has('phone1')) sets.phone_1 = data.phone1 || '';
+    if (has('phone2')) sets.phone_2 = data.phone2 || '';
+    if (has('status') && data.status) sets.status = data.status;
+    await db.prepare(`UPDATE nucleation_contacts SET ${Object.keys(sets).map(column => `${column} = @${column}`).join(', ')} WHERE id = @id`).run({ id, ...sets });
 
     const contact = await loadContactFull(id);
     res.json(contact);
