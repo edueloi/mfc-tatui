@@ -48,6 +48,7 @@ if(openEvents||homeEvents){
   };
   const renderEvents=events=>{
     eventSchema(events);
+    window.__mfcEvents=events;queueMicrotask(()=>document.dispatchEvent(new CustomEvent('mfc:events',{detail:events})));
     if(!events.length){eventsTarget.innerHTML=openEvents?'<div class="agenda-empty"><span>✦</span><h3>Nenhuma inscrição aberta neste momento.</h3><p>Em breve teremos novos encontros. Volte para conferir a agenda.</p></div>':'<a class="event-card solid" href="eventos.html"><div><div class="event-type">Agenda</div><h3>Novos encontros em breve</h3></div><div><div class="date">Acompanhe a agenda</div><span class="arrow">↗</span></div></a>';return}
     if(!openEvents){eventsTarget.innerHTML=events.slice(0,3).map((event,index)=>{const formLink=`${appUrl}/eventos/inscricao/${encodeURIComponent(event.publicToken)}`;return `<a class="event-card ${index===0?'featured':index===1?'solid':'light'}" href="${formLink}" target="_blank" rel="noopener noreferrer" aria-label="Inscrever-se em ${escapeHtml(event.name)} em nova aba"><div><div class="event-type">${event.bridal?'Encontro de noivos':'Inscrição aberta'}</div><h3>${escapeHtml(event.name)}</h3></div><div><div class="date">${formatDate(event.date)}${event.startTime?` • ${event.startTime}`:''}</div><span class="arrow">↗</span></div></a>`}).join('');return}
     eventsTarget.innerHTML=events.map((event,index)=>{

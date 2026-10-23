@@ -1,0 +1,137 @@
+/* ───────── MFC de Tatuí · camada extra: responsividade, animações e conversão ─────────
+   Carregado depois de styles.css. Tudo aqui respeita prefers-reduced-motion (bloco final). */
+
+[hidden]{display:none!important}
+html,body{overflow-x:clip}
+:focus-visible{outline:3px solid #8fbcff;outline-offset:3px;border-radius:6px}
+
+/* Barra de progresso de leitura */
+.sp-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:70;transform-origin:0 50%;transform:scaleX(var(--p,0));background:linear-gradient(90deg,#8fbcff,#4a4390 60%,#3b3578);pointer-events:none}
+
+/* Cabeçalho: encolhe e ganha sombra ao rolar */
+body>header.shell .nav{transition:height .28s ease}
+body>header.shell{transition:box-shadow .28s ease,background .28s ease}
+body>header.shell.is-scrolled{background:rgba(255,255,255,.96);box-shadow:0 10px 30px rgba(29,27,61,.1)}
+@media(min-width:801px){body>header.shell.is-scrolled .nav{height:62px!important}}
+
+/* Faixa de palavras (marquee) */
+.words-strip{overflow:hidden;background:#1d1b3d;color:#dcd9f5;border-block:1px solid rgba(255,255,255,.08)}
+.words-track{display:flex;width:max-content;animation:wordsMove 38s linear infinite}
+.words-strip:hover .words-track{animation-play-state:paused}
+.words-track span{padding:15px 26px;font:600 13px 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+.words-track i{font-style:normal;color:#8fbcff;margin-left:52px}
+@keyframes wordsMove{to{transform:translateX(-50%)}}
+
+/* Números */
+.numbers{padding:84px 0;background:#fff}
+.numbers-head{max-width:640px;margin:0 0 38px}
+.numbers-head h2{margin:12px 0 0;font:600 clamp(32px,4.2vw,54px)/1 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-.055em}
+.numbers-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.num-card{position:relative;overflow:hidden;padding:28px 24px 26px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(160deg,#fff,#f5f5f9);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s ease,border-color .35s ease}
+.num-card:hover{transform:translateY(-6px);box-shadow:0 22px 40px rgba(29,27,61,.12);border-color:rgba(74,67,144,.35)}
+.num-card b{display:block;font:700 clamp(46px,5.4vw,72px)/1 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-.06em;background:linear-gradient(135deg,#1d1b3d,#4a4390 70%,#8fbcff);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+.num-card b sup{font-size:.4em;letter-spacing:0;vertical-align:top;margin-left:2px}
+.num-card span{display:block;margin-top:14px;color:var(--muted);font-size:14px;line-height:1.5}
+
+/* O que vivemos */
+.live{padding:96px 0;background:linear-gradient(180deg,#f5f5f9,#ecebf4)}
+.live-head{display:flex;justify-content:space-between;align-items:end;gap:32px;margin-bottom:34px}
+.live-head h2{margin:12px 0 0;font:600 clamp(32px,4.2vw,54px)/1 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-.055em;max-width:560px}
+.live-head p{max-width:360px;margin:0;color:var(--muted);line-height:1.65}
+.live-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.val-card{position:relative;overflow:hidden;padding:26px 24px 28px;border-radius:18px;background:#fff;border:1px solid rgba(29,27,61,.1);box-shadow:0 10px 26px rgba(29,27,61,.05);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s ease}
+.val-card:hover{transform:translateY(-8px);box-shadow:0 26px 44px rgba(29,27,61,.14)}
+.val-ico{display:grid;place-items:center;width:50px;height:50px;margin-bottom:22px;border-radius:15px;background:linear-gradient(135deg,#3b3578,#4a4390);color:#fff;transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.val-card:hover .val-ico{transform:rotate(-8deg) scale(1.08)}
+.val-ico svg{width:24px;height:24px}
+.val-card h3{margin:0 0 9px;font:600 22px 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-.035em}
+.val-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.62}
+
+/* Visite-nos */
+.visit{padding:96px 0;background:#fff}
+.visit-box{display:grid;grid-template-columns:1.05fr .95fr;gap:18px;align-items:stretch}
+.visit-copy{padding:clamp(28px,4vw,48px);border-radius:22px;color:#fff;background:linear-gradient(135deg,#1d1b3d,#3b3578);position:relative;overflow:hidden}
+.visit-copy:after{content:'';position:absolute;width:320px;height:320px;right:-120px;top:-130px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 66%);pointer-events:none}
+.visit-copy .eyebrow{color:#d6e5ff}
+.visit-copy h2{position:relative;margin:12px 0 22px;font:600 clamp(32px,4vw,50px)/1 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-.055em}
+.visit-list{position:relative;display:grid;gap:16px;margin:0 0 28px;padding:0;list-style:none}
+.visit-list li{display:grid;grid-template-columns:40px 1fr;gap:14px;align-items:start;font-size:15px;line-height:1.55;color:#e6e4f7}
+.visit-list b{display:block;color:#fff;font-weight:700}
+.visit-list i{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.12);font-style:normal;font-size:17px}
+.visit-actions{position:relative;display:flex;flex-wrap:wrap;gap:12px}
+.visit-actions .hx-btn{background:#fff;color:#2b2760}
+.visit-actions .hx-link{color:#fff}
+.visit-map{min-height:340px;border-radius:22px;overflow:hidden;border:1px solid var(--line);background:#ecebf4}
+.visit-map iframe{display:block;width:100%;height:100%;min-height:340px;border:0}
+
+/* Eventos: selo de data, contagem e layout por quantidade */
+.ev-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;position:relative}
+.dbadge{display:inline-grid;place-items:center;min-width:54px;padding:8px 6px 7px;border-radius:13px;background:#fff;color:#1d1b3d;line-height:1;box-shadow:0 8px 18px rgba(29,27,61,.14)}
+.dbadge b{font:700 24px 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-.04em}
+.dbadge small{margin-top:3px;font:700 10px 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#4a4390}
+.cd-chip{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:99px;background:rgba(143,188,255,.22);color:#2b2760;font:700 11px 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:.03em}
+.cd-chip:before{content:'';width:7px;height:7px;border-radius:50%;background:#2fbf71;box-shadow:0 0 0 0 rgba(47,191,113,.6);animation:liveDot 1.8s ease-out infinite}
+@keyframes liveDot{70%{box-shadow:0 0 0 8px rgba(47,191,113,0)}100%{box-shadow:0 0 0 0 rgba(47,191,113,0)}}
+.event-grid.n1,.open-events.n1{grid-template-columns:1fr}
+.event-grid.n2{grid-template-columns:1fr 1fr}
+@media(min-width:801px){.event-grid.n1 .event-card{flex-direction:row;align-items:flex-end;min-height:230px;padding:30px 34px}.event-grid.n1 .event-card>div:first-child{max-width:640px}.event-grid.n1 .event-card h3{font-size:clamp(30px,3.4vw,46px)!important}}
+
+/* Brilho que segue o cursor */
+.spot-glow{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity .3s ease;background:radial-gradient(280px circle at var(--mx,50%) var(--my,50%),rgba(143,188,255,.3),transparent 62%)}
+.spot:hover>.spot-glow{opacity:1}
+
+/* Entradas animadas dos blocos novos */
+[data-reveal]{opacity:0;transform:translateY(30px) scale(.985);transition:opacity .8s cubic-bezier(.2,.8,.2,1),transform .8s cubic-bezier(.2,.8,.2,1)}
+[data-reveal].is-in{opacity:1;transform:none}
+
+/* Botão flutuante do WhatsApp */
+.wa-float{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:55;display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 20px 0 16px;border-radius:99px;background:#25d366;color:#fff!important;font:700 14px 'Plus Jakarta Sans',system-ui,sans-serif;text-decoration:none;box-shadow:0 12px 28px rgba(18,140,70,.4);transition:transform .25s ease,box-shadow .25s ease}
+.wa-float:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 18px 34px rgba(18,140,70,.5)}
+.wa-float svg{width:26px;height:26px;flex:none}
+.wa-float:before{content:'';position:absolute;inset:0;border-radius:inherit;border:2px solid #25d366;animation:waRing 2.4s ease-out infinite;pointer-events:none}
+@keyframes waRing{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.35);opacity:0}}
+
+/* Botões e links: resposta ao toque */
+.hx-btn,.small-btn,.event-signup,.outline-btn{transition:transform .22s ease,box-shadow .22s ease,background .22s ease}
+.hx-btn:active,.small-btn:active,.event-signup:active{transform:scale(.97)}
+
+/* ───────── Responsivo ───────── */
+@media(max-width:1000px){
+  .numbers-grid,.live-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .visit-box{grid-template-columns:1fr}
+  .live-head{display:block}.live-head p{margin-top:14px}
+}
+@media(max-width:800px){
+  .numbers,.live,.visit{padding:68px 0}
+  .event-grid.n2{grid-template-columns:1fr}
+  .visit-map,.visit-map iframe{min-height:280px}
+  .words-track span{padding:13px 20px;font-size:12px}
+}
+@media(max-width:600px){
+  .wa-float{width:56px;padding:0;justify-content:center}.wa-float span{display:none}
+  .num-card{padding:22px 18px 20px}.num-card span{font-size:13px}
+  .val-card{padding:22px 20px 24px}
+  .visit-actions .hx-btn,.visit-actions .hx-link{width:100%;justify-content:center;text-align:center}
+  /* alvos de toque confortáveis */
+  .nav-links a,.footer a,.text-link{min-height:44px;display:inline-flex;align-items:center}
+}
+@media(max-width:420px){
+  .numbers-grid,.live-grid{grid-template-columns:1fr}
+  .num-card{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;align-items:center}.num-card span{margin:0}
+}
+
+/* ───────── Movimento reduzido ───────── */
+@media(prefers-reduced-motion:reduce){
+  .words-track,.cd-chip:before,.wa-float:before{animation:none}
+  [data-reveal]{opacity:1;transform:none;transition:none}
+  .sp-bar{display:none}
+  .num-card,.val-card,.val-ico,.wa-float{transition:none}
+}
+
+/* espaço entre a faixa de palavras e a declaração */
+.words-strip+.statement{padding-top:64px}
+@media(max-width:800px){.words-strip+.statement{padding-top:44px}}
+
+/* agenda: selo e contagem ficam dentro da coluna do tipo de evento */
+.open-event__top .ev-meta{margin:12px 0 0;gap:8px}
+.open-event__top .dbadge{box-shadow:0 4px 12px rgba(29,27,61,.12);border:1px solid rgba(29,27,61,.08)}
