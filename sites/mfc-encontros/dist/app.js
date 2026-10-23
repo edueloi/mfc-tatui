@@ -36,7 +36,7 @@ const openEvents=document.getElementById('open-events');
 const homeEvents=!openEvents?document.querySelector('.event-grid'):null;
 if(openEvents||homeEvents){
   const eventsTarget=openEvents||homeEvents;
-  const apiUrl=window.MFC_API_URL||(isLocalPortal?'http://localhost:4000':'');
+  const apiUrl=window.MFC_API_URL||(isLocalPortal?'http://localhost:4000':window.location.origin);
   const appUrl=window.MFC_APP_URL||(isLocalPortal?'http://localhost:3000':window.location.origin);
   const escapeHtml=value=>String(value||'').replace(/[&<>'"]/g,char=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
   const formatDate=value=>{if(!value)return 'Data a confirmar';const [year,month,day]=value.slice(0,10).split('-');return `${day}/${month}/${year}`};
@@ -64,7 +64,7 @@ document.querySelectorAll('a').forEach(link=>{if(link.textContent.trim().toLower
 const blogFeature=document.getElementById('blog-feature');
 const blogPosts=document.getElementById('blog-posts');
 if(blogFeature||blogPosts){
-  const blogApi=window.MFC_API_URL||(isLocalPortal?'http://localhost:4000':'');
+  const blogApi=window.MFC_API_URL||(isLocalPortal?'http://localhost:4000':window.location.origin);
   const blogEscape=value=>String(value||'').replace(/[&<>'"]/g,char=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
   const blogImage=value=>value&&value.startsWith('/uploads/')?`${blogApi}${value}`:value;
   const blogDate=value=>value?new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'long',year:'numeric'}).format(new Date(value.replace(' ','T'))):'';
@@ -74,7 +74,7 @@ if(blogFeature||blogPosts){
 }
 const homeStories=document.getElementById('home-stories');
 if(homeStories){
-  const homeBlogApi=window.MFC_API_URL||(isLocalPortal?'http://localhost:4000':'');
+  const homeBlogApi=window.MFC_API_URL||(isLocalPortal?'http://localhost:4000':window.location.origin);
   const homeEscape=value=>String(value||'').replace(/[&<>'"]/g,char=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
   const homeImage=value=>value&&value.startsWith('/uploads/')?`${homeBlogApi}${value}`:value;
   if(!homeBlogApi) homeStories.innerHTML=''; else fetch(`${homeBlogApi}/blog/public`).then(response=>response.ok?response.json():Promise.reject()).then(posts=>{const items=posts.slice(0,3);homeStories.innerHTML=items.length?items.map(post=>`<a class="home-story-card" href="historias.html"><div class="home-story-card__image" style="background-image:url('${homeEscape(homeImage(post.coverImage||post.images?.[0]?.imageUrl||''))}')"></div><div><small>${post.images?.length||0} fotos · História do MFC</small><h3>${homeEscape(post.title)}</h3><p>${homeEscape(post.excerpt||post.content)}</p><span>Ler história →</span></div></a>`).join(''):''}).catch(()=>{homeStories.innerHTML=''})
