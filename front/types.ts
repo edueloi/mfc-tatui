@@ -361,6 +361,8 @@ export interface NucleationContact {
   /** Cadastro manual do casal (igual ao de noivos). */
   noivoName?: string; noivoEmail?: string; noivoDob?: string;
   noivaName?: string; noivaEmail?: string; noivaDob?: string;
+  noivoProfession?: string; noivoEducation?: string; noivoReligion?: string;
+  noivaProfession?: string; noivaEducation?: string; noivaReligion?: string;
   zip?: string; street?: string; number?: string; neighborhood?: string; complement?: string; city?: string; state?: string;
   notes?: string;
 }

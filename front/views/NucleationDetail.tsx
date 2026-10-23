@@ -239,6 +239,12 @@ const NucleationDetail: React.FC = () => {
               <DetailField label="E-mail da noiva" value={contact.noivaEmail || '—'} />
               <DetailField label="Nascimento do noivo" value={contact.noivoDob ? dateLabel(contact.noivoDob) : '—'} />
               <DetailField label="Nascimento da noiva" value={contact.noivaDob ? dateLabel(contact.noivaDob) : '—'} />
+              <DetailField label="Profissão do noivo" value={contact.noivoProfession || '—'} />
+              <DetailField label="Profissão da noiva" value={contact.noivaProfession || '—'} />
+              <DetailField label="Escolaridade do noivo" value={contact.noivoEducation || '—'} />
+              <DetailField label="Escolaridade da noiva" value={contact.noivaEducation || '—'} />
+              <DetailField label="Religião do noivo" value={contact.noivoReligion || '—'} />
+              <DetailField label="Religião da noiva" value={contact.noivaReligion || '—'} />
               <DetailField label="Endereço" value={[contact.street, contact.number, contact.complement, contact.neighborhood].filter(Boolean).join(', ') || '—'} />
               <DetailField label="Cidade / UF" value={[contact.city, contact.state].filter(Boolean).join(' / ') || '—'} />
               <DetailField label="CEP" value={contact.zip || '—'} />

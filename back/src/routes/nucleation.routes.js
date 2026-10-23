@@ -12,12 +12,16 @@ const router = express.Router();
 const CONTACT_EXTRA_COLUMNS = [
   ['noivo_name', 'VARCHAR(150)'], ['noivo_email', 'VARCHAR(150)'], ['noivo_dob', 'VARCHAR(10)'],
   ['noiva_name', 'VARCHAR(150)'], ['noiva_email', 'VARCHAR(150)'], ['noiva_dob', 'VARCHAR(10)'],
+  ['noivo_profession', 'VARCHAR(120)'], ['noivo_education', 'VARCHAR(120)'], ['noivo_religion', 'VARCHAR(120)'],
+  ['noiva_profession', 'VARCHAR(120)'], ['noiva_education', 'VARCHAR(120)'], ['noiva_religion', 'VARCHAR(120)'],
   ['zip', 'VARCHAR(9)'], ['street', 'VARCHAR(200)'], ['address_number', 'VARCHAR(20)'], ['neighborhood', 'VARCHAR(120)'],
   ['complement', 'VARCHAR(120)'], ['city', 'VARCHAR(120)'], ['state', 'VARCHAR(2)'], ['notes', 'TEXT'],
 ];
 const CONTACT_FIELDS = {
   noivoName: 'noivo_name', noivoEmail: 'noivo_email', noivoDob: 'noivo_dob',
   noivaName: 'noiva_name', noivaEmail: 'noiva_email', noivaDob: 'noiva_dob',
+  noivoProfession: 'noivo_profession', noivoEducation: 'noivo_education', noivoReligion: 'noivo_religion',
+  noivaProfession: 'noiva_profession', noivaEducation: 'noiva_education', noivaReligion: 'noiva_religion',
   zip: 'zip', street: 'street', number: 'address_number', neighborhood: 'neighborhood',
   complement: 'complement', city: 'city', state: 'state', notes: 'notes',
 };
