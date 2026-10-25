@@ -81,7 +81,7 @@ export function SectionTitle({
         )}
 
         <div className="min-w-0">
-          <h1 className="truncate font-display text-base font-medium tracking-tight text-slate-900 sm:text-lg">
+          <h1 className="break-words font-display text-base font-medium tracking-tight text-slate-900 sm:truncate sm:text-lg">
             {title}
           </h1>
 

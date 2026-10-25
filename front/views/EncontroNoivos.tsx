@@ -6,7 +6,7 @@ import { api } from '../api';
 import { BridalCouple, BridalMeeting, Event } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
-  FilterLineSegmented, GridTable, EmptyState, Badge, Modal, ConfirmModal, Tabs, usePagination,
+  FilterLineSegmented, GridTable, EmptyState, Badge, Modal, ConfirmModal, Tabs, Pagination, usePagination,
 } from '../components/ui';
 import type { Column } from '../components/ui';
 import { BridalCoupleForm, BridalCoupleFormData } from '../components/BridalCoupleForm';
@@ -224,6 +224,34 @@ const EncontroNoivos: React.FC = () => {
     </div> },
   ];
 
+  const renderCoupleCard = (couple: BridalCouple) => {
+    const meeting = couple.eventId ? meetingLookup.get(couple.eventId) : null;
+    return <article key={couple.id} onClick={() => navigate(couplePath(couple, couples))}
+      className="flex min-w-0 cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-blue-300 active:bg-slate-50">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold leading-snug text-slate-900 [overflow-wrap:anywhere]">{coupleName(couple)}</h3>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
+            <span>{couple.filledExternally ? 'Preenchido pelo casal' : 'Cadastro interno'}</span>
+            {viewMode === 'todos' && <span className="inline-flex items-center gap-1 text-blue-700"><Calendar size={10} />{meeting ? meeting.name : 'Sem encontro'}</span>}
+          </p>
+        </div>
+        <Badge size="sm" dot color={statusColor(couple.status)} className="shrink-0">{couple.status}</Badge>
+      </div>
+      <div><Badge size="sm" color={paymentColor(couple.paymentStatus)}>Pagamento: {couple.paymentStatus}</Badge></div>
+      <div className="mt-auto space-y-2 border-t border-slate-100 pt-3">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={event => { event.stopPropagation(); navigate(couplePath(couple, couples)); }}>Abrir</Button>
+          {canCreate && couple.status === 'Confirmado' && <Button variant="outline" size="sm" loading={nucleatingId === couple.id} disabled={!!nucleatingId} iconLeft={<PhoneCall size={13} />} onClick={event => { event.stopPropagation(); handleSendToNucleation(couple); }}>Nucleação</Button>}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="ghost" size="xs" iconLeft={<Copy size={13} />} onClick={event => { event.stopPropagation(); copyPublicLink(couple.publicToken); }}>Copiar link</Button>
+          {canDelete && <Button variant="ghost" size="xs" className="text-red-600 hover:bg-red-50" iconLeft={<Trash2 size={13} />} aria-label={`Excluir ficha de ${coupleName(couple)}`} onClick={event => { event.stopPropagation(); setDeleteTarget(couple); }}>Excluir</Button>}
+        </div>
+      </div>
+    </article>;
+  };
+
   if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando encontros…</div></PageWrapper>;
 
   if (error && !couples.length && !meetings.length) return <PageWrapper><ContentCard><EmptyState icon={Heart} title="Não foi possível carregar o Encontro de Noivos" description="Confira a conexão e tente novamente."
@@ -244,9 +272,8 @@ const EncontroNoivos: React.FC = () => {
     <div className="space-y-3">
       <FilterLine>
         <FilterLineSection grow>
-          <FilterLineSegmented value={meetingFilter} onChange={value => setMeetingFilter(String(value))} options={[{ value: 'open', label: `Em andamento (${openMeetings.length})` }, { value: 'closed', label: `Encerrados (${closedMeetings.length})` }, { value: 'all', label: 'Todos' }]} />
+          <FilterLineSegmented className="[&>button]:whitespace-nowrap [&>button]:px-1.5 [&>button]:text-[11.5px] sm:[&>button]:px-2.5 sm:[&>button]:text-xs" value={meetingFilter} onChange={value => setMeetingFilter(String(value))} options={[{ value: 'open', label: `Em aberto (${openMeetings.length})` }, { value: 'closed', label: `Encerrados (${closedMeetings.length})` }, { value: 'all', label: 'Todos' }]} />
         </FilterLineSection>
-        <FilterLineSection align="right">{canCreate && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openMeetingForm(null)}>Novo encontro</Button>}</FilterLineSection>
       </FilterLine>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {shownMeetings.map(meeting => { const status = statusOf.get(meeting.id)!; return (
@@ -266,15 +293,19 @@ const EncontroNoivos: React.FC = () => {
                 </ul>
               </button>
             </div>
-            <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/50 p-3">
-              <Button size="xs" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={() => navigate(meetingPath(meeting, meetings))}>Abrir encontro</Button>
-              {!status.closed && <Button variant="outline" size="xs" iconLeft={<Send size={12} />} disabled={!!openingEvent} onClick={() => openCoupleInvite(meeting)}>Convidar</Button>}
-              <IconButton variant="ghost" size="xs" aria-label={`Evento e finanças de ${meeting.name}`} title="Evento, gastos e entradas" className="h-8 w-8" disabled={!!openingEvent} onClick={() => openMeetingEvent(meeting)}><Wallet size={14} /></IconButton>
-              {canCreate && (status.closed
-                ? status.reason === 'manual' && <IconButton variant="ghost" size="xs" aria-label={`Reabrir ${meeting.name}`} title="Reabrir encontro" className="h-8 w-8" onClick={() => setMeetingActive(meeting, true)}><LockOpen size={14} /></IconButton>
-                : <IconButton variant="ghost" size="xs" aria-label={`Encerrar ${meeting.name}`} title="Encerrar encontro" className="h-8 w-8" onClick={() => setCloseTarget(meeting)}><Lock size={14} /></IconButton>)}
-              {canCreate && <IconButton variant="ghost" size="xs" aria-label={`Editar ${meeting.name}`} className="h-8 w-8" onClick={() => openMeetingForm(meeting)}><Pencil size={14} /></IconButton>}
-              {canDelete && <IconButton variant="ghost" size="xs" aria-label={`Excluir ${meeting.name}`} className="h-8 w-8" onClick={() => setDeleteMeetingTarget(meeting)}><Trash2 size={14} className="text-red-500" /></IconButton>}
+            <div className="space-y-2 border-t border-slate-100 bg-slate-50/50 p-3">
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={() => navigate(meetingPath(meeting, meetings))}>Abrir encontro</Button>
+                {!status.closed && <Button variant="outline" size="sm" iconLeft={<Send size={12} />} disabled={!!openingEvent} onClick={() => openCoupleInvite(meeting)}>Convidar</Button>}
+              </div>
+              <div className="flex items-center justify-between gap-1">
+                <Button variant="ghost" size="xs" className="px-1.5" iconLeft={<Wallet size={13} />} disabled={!!openingEvent} title="Evento, gastos e entradas" onClick={() => openMeetingEvent(meeting)}>Finanças</Button>
+                {canCreate && (status.closed
+                  ? status.reason === 'manual' && <Button variant="ghost" size="xs" className="px-1.5" iconLeft={<LockOpen size={13} />} onClick={() => setMeetingActive(meeting, true)}>Reabrir</Button>
+                  : <Button variant="ghost" size="xs" className="px-1.5" iconLeft={<Lock size={13} />} onClick={() => setCloseTarget(meeting)}>Encerrar</Button>)}
+                {canCreate && <Button variant="ghost" size="xs" className="px-1.5" iconLeft={<Pencil size={13} />} onClick={() => openMeetingForm(meeting)}>Editar</Button>}
+                {canDelete && <Button variant="ghost" size="xs" className="px-1.5 text-red-600 hover:bg-red-50" iconLeft={<Trash2 size={13} />} onClick={() => setDeleteMeetingTarget(meeting)}>Excluir</Button>}
+              </div>
             </div>
           </ContentCard>
         ); })}
@@ -293,28 +324,45 @@ const EncontroNoivos: React.FC = () => {
 
   const couplesTable = (
     <div className="space-y-3">
+      {/* Celular: resumo em uma linha só */}
+      <div className="grid grid-cols-4 gap-2 sm:hidden" aria-label="Resumo dos casais">
+        {([['Casais', stats.total, 'text-blue-700'], ['Confirmados', stats.confirmados, 'text-emerald-600'], ['Pgto pendente', stats.pendentesPagamento, 'text-amber-600'], ['Pelo casal', stats.externos, 'text-purple-600']] as const).map(([label, value, color]) =>
+          <div key={label} className="rounded-xl border border-slate-200 bg-white px-1.5 py-2.5 text-center"><p className={`text-lg font-semibold leading-none ${color}`}>{value}</p><p className="mt-1.5 text-[10px] leading-tight text-slate-500">{label}</p></div>)}
+      </div>
+      <div className="hidden sm:block">
       <StatGrid cols={4}>
         <StatCard title="Total de casais" value={stats.total} icon={Heart} color="info" />
         <StatCard title="Confirmados" value={stats.confirmados} icon={CheckCircle2} color="success" />
         <StatCard title="Pagamento pendente" value={stats.pendentesPagamento} icon={Clock} color="warning" />
         <StatCard title="Preenchidos pelo casal" value={stats.externos} icon={LinkIcon} color="purple" />
       </StatGrid>
+      </div>
       <FilterLine>
         <FilterLineSection grow>
           <FilterLineItem grow><FilterLineSearch aria-label="Buscar casal" value={search} onChange={setSearch} placeholder="Nome do noivo ou da noiva…" /></FilterLineItem>
-          <FilterLineItem><FilterLineSegmented<string> value={statusFilter} onChange={setStatusFilter} options={[{ value: 'Todos', label: 'Todos' }, { value: 'Confirmado', label: 'Confirmados' }, { value: 'Aguardando Pagamento', label: 'Pendentes' }]} /></FilterLineItem>
+          <FilterLineItem><FilterLineSegmented<string> className="[&>button]:whitespace-nowrap [&>button]:px-1.5 [&>button]:text-[11.5px] sm:[&>button]:px-2.5 sm:[&>button]:text-xs" value={statusFilter} onChange={setStatusFilter} options={[{ value: 'Todos', label: 'Todos' }, { value: 'Confirmado', label: 'Confirmados' }, { value: 'Aguardando Pagamento', label: 'Pendentes' }]} /></FilterLineItem>
         </FilterLineSection>
         <FilterLineSection align="right">
           <span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'casal' : 'casais'}</span>
           {hasFilter && <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatusFilter('Todos'); }}>Limpar filtros</Button>}
         </FilterLineSection>
       </FilterLine>
+      {/* Celular e tablet: cartões (1 coluna no celular, 2 no tablet). Tabela só em telas largas. */}
+      <div className="xl:hidden">
+        {paginatedData.length
+          ? <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{paginatedData.map(renderCoupleCard)}</div>
+          : <ContentCard><EmptyState icon={Heart} title="Nenhum casal encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Cadastre o primeiro casal.'}
+            action={!hasFilter && canCreate ? <Button size="sm" onClick={() => setShowCoupleModal(true)}>Novo casal</Button> : undefined} /></ContentCard>}
+        {filtered.length > 0 && <div className="mt-3"><Pagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} /></div>}
+      </div>
+      <div className="hidden xl:block">
       <ContentCard padding="none">
-        <GridTable columns={columns} data={paginatedData} keyExtractor={couple => couple.id} noDesktopCard onRowClick={couple => navigate(couplePath(couple, couples))}
+        <GridTable columns={columns} data={paginatedData} keyExtractor={couple => couple.id} noDesktopCard disableMobileCards onRowClick={couple => navigate(couplePath(couple, couples))}
           emptyMessage={<EmptyState icon={Heart} title="Nenhum casal encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Cadastre o primeiro casal.'}
             action={!hasFilter && canCreate ? <Button size="sm" onClick={() => setShowCoupleModal(true)}>Novo casal</Button> : undefined} />}
           pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
       </ContentCard>
+      </div>
     </div>
   );
 
@@ -324,7 +372,7 @@ const EncontroNoivos: React.FC = () => {
         {inMeeting ? <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate(BRIDAL_BASE)}>Voltar para Encontros</Button>
-            {selectedMeeting && canCreate && <div className="flex flex-wrap gap-2">
+            {selectedMeeting && canCreate && <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
               {!meetingStatus(selectedMeeting).closed && <Button variant="outline" size="sm" iconLeft={<Send size={14} />} loading={openingEvent === selectedMeeting.id} onClick={() => openCoupleInvite(selectedMeeting)}>Convidar casal</Button>}
               <Button variant="outline" size="sm" iconLeft={<Wallet size={14} />} loading={openingEvent === selectedMeeting.id} onClick={() => openMeetingEvent(selectedMeeting)}>Evento e finanças</Button>
               {!meetingStatus(selectedMeeting).closed && <Button variant="outline" size="sm" iconLeft={<Lock size={14} />} onClick={() => setCloseTarget(selectedMeeting)}>Encerrar encontro</Button>}
@@ -335,12 +383,14 @@ const EncontroNoivos: React.FC = () => {
           <SectionTitle icon={Heart}
             title={orphanView ? 'Casais sem encontro definido' : selectedMeeting!.name}
             description={orphanView ? 'Fichas ainda não vinculadas a uma turma.' : [dateLabel(selectedMeeting!.date), [selectedMeeting!.startTime, selectedMeeting!.endTime].filter(Boolean).join(' às '), selectedMeeting!.location].filter(Boolean).join(' · ')}
-            action={canCreate ? <Button size="sm" iconLeft={<Plus size={14} />} disabled={!!selectedMeeting && meetingStatus(selectedMeeting).closed} title={selectedMeeting && meetingStatus(selectedMeeting).closed ? 'Encontro encerrado: reabra para vincular novos casais' : undefined} onClick={() => setShowCoupleModal(true)}>Novo casal</Button> : undefined} />
+            action={canCreate ? <Button size="sm" className="w-full sm:w-auto" iconLeft={<Plus size={14} />} disabled={!!selectedMeeting && meetingStatus(selectedMeeting).closed} title={selectedMeeting && meetingStatus(selectedMeeting).closed ? 'Encontro encerrado: reabra para vincular novos casais' : undefined} onClick={() => setShowCoupleModal(true)}>Novo casal</Button> : undefined} />
           {selectedMeeting && meetingStatus(selectedMeeting).closed && <ContentCard padding="md" className="bg-slate-50"><p className="flex items-center gap-2 text-xs text-slate-600"><Lock size={14} className="shrink-0" />Encontro encerrado{meetingStatus(selectedMeeting).reason === 'auto' ? ` automaticamente (${CLOSE_AFTER_DAYS} dias depois da data)` : ''}. As fichas continuam disponíveis para consulta.</p></ContentCard>}
           {couplesTable}
         </> : <>
           <SectionTitle icon={Heart} title="Encontro de Noivos" description={viewMode === 'todos' ? 'Todos os casais, de todos os encontros.' : 'Escolha um encontro para ver os casais inscritos.'}
-            action={viewMode === 'todos' && canCreate ? <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowCoupleModal(true)}>Novo casal</Button> : undefined} />
+            action={canCreate ? (viewMode === 'todos'
+              ? <Button size="sm" className="w-full sm:w-auto" iconLeft={<Plus size={14} />} onClick={() => setShowCoupleModal(true)}>Novo casal</Button>
+              : <Button size="sm" className="w-full sm:w-auto" iconLeft={<Plus size={14} />} onClick={() => openMeetingForm(null)}>Novo encontro</Button>) : undefined} />
           <Tabs<typeof tabs[number]['id']> items={tabs} value={viewMode} onChange={id => navigate(id === 'todos' ? `${BRIDAL_BASE}/casais` : BRIDAL_BASE)} label="Visualização do Encontro de Noivos">
             {viewMode === 'encontros' ? meetingsGrid : couplesTable}
           </Tabs>
