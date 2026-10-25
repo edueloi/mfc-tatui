@@ -381,6 +381,11 @@ export interface NucleationGroup {
   id: string;
   name: string;
   description: string;
+  /** Cada grupo é também um encontro de nucleação. */
+  eventDate: string;
+  eventTime: string;
+  location: string;
+  leader: string;
   contactsCount: number;
   createdAt: string;
   updatedAt: string;

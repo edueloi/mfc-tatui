@@ -202,6 +202,11 @@ export const api = {
   getNucleationGroups: () => request('/nucleation/groups'),
   getNucleationGroup: (id: string) => request(`/nucleation/groups/${id}`),
   createNucleationGroup: (data: any) => request('/nucleation/groups', { method: 'POST', body: JSON.stringify(data) }),
+  updateNucleationGroup: (id: string, data: any) => request(`/nucleation/groups/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteNucleationGroup: (id: string) => request(`/nucleation/groups/${id}`, { method: 'DELETE' }),
+  addNucleationGroupMembers: (id: string, contactIds: string[]) => request(`/nucleation/groups/${id}/members`, { method: 'POST', body: JSON.stringify({ contactIds }) }),
+  generateNucleationGroups: (data: any) => request('/nucleation/groups/generate', { method: 'POST', body: JSON.stringify(data) }),
+  nucleationAttendanceUrl: (id: string, download = false) => `${API_BASE_URL}/nucleation/groups/${id}/attendance.pdf${download ? '?download=1' : ''}`,
   createNucleationGroupHistory: (id: string, data: any) => request(`/nucleation/groups/${id}/history`, { method: 'POST', body: JSON.stringify(data) }),
   setNucleationContactGroup: (id: string, groupId: string | null) => request(`/nucleation/${id}/group`, { method: 'PUT', body: JSON.stringify({ groupId }) }),
   convertNucleationContact: (id: string, data: any = {}) =>
