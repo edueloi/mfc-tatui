@@ -112,28 +112,55 @@ router.get('/', async (req, res) => {
 const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 const digits = (value) => String(value || '').replace(/\D/g, '');
 
-// Chaves para reconhecer casais já cadastrados: nomes do casal ou algum telefone igual.
+// Reconhece quem já está na Nucleação: pelo par de nomes do casal, por QUALQUER um dos nomes (noivo ou noiva, em
+// qualquer ordem e sem diferença de acento/maiúscula) ou por um telefone igual. Quem já existe é ignorado.
+const fullName = (value) => { const n = norm(value); return n.split(' ').filter(Boolean).length >= 2 ? n : ''; }; // nome sozinho (ex.: "Maria") não conta
+
 async function loadExistingKeys() {
   const rows = await db.prepare('SELECT id, name, phone_1, phone_2, noivo_name, noiva_name FROM nucleation_contacts').all();
-  const names = new Map(); const phones = new Map();
+  const names = new Map(); const phones = new Map(); const people = new Map();
   for (const row of rows) {
-    const [legacyA, legacyB] = String(row.name || '').split(/\s+&\s+/);
-    names.set(`${norm(row.noivo_name || legacyA)}|${norm(row.noiva_name || legacyB)}`, row.name);
+    const legacy = String(row.name || '').split(/\s+&\s+|\s+e\s+/i);
+    const noivo = row.noivo_name || legacy[0]; const noiva = row.noiva_name || legacy[1];
+    names.set(`${norm(noivo)}|${norm(noiva)}`, row.name);
+    for (const person of [noivo, noiva, ...(row.noivo_name || row.noiva_name ? [] : legacy)]) { const key = fullName(person); if (key) people.set(key, row.name); }
     for (const phone of [row.phone_1, row.phone_2]) if (digits(phone).length >= 10) phones.set(digits(phone), row.name);
   }
-  return { names, phones };
+  return { names, phones, people };
+}
+
+/** Motivo pelo qual o casal já existe (ou '' se é novo). Usado na prévia e de novo na confirmação. */
+function findExisting(couple, existing) {
+  const noivo = couple.noivo || {}; const noiva = couple.noiva || {};
+  const byPair = existing.names.get(`${norm(noivo.name)}|${norm(noiva.name)}`) || existing.names.get(`${norm(noiva.name)}|${norm(noivo.name)}`);
+  if (byPair) return { of: byPair, reason: 'Já cadastrado na Nucleação' };
+  for (const person of [noivo, noiva]) {
+    const key = fullName(person.name);
+    if (key && existing.people.has(key)) return { of: existing.people.get(key), reason: `Nome já cadastrado: ${person.name}` };
+  }
+  for (const phone of [noivo.phone, noiva.phone]) {
+    if (digits(phone).length >= 10 && existing.phones.has(digits(phone))) return { of: existing.phones.get(digits(phone)), reason: 'Telefone já cadastrado' };
+  }
+  return null;
+}
+
+function rememberCouple(couple, existing, label) {
+  const noivo = couple.noivo || {}; const noiva = couple.noiva || {};
+  existing.names.set(`${norm(noivo.name)}|${norm(noiva.name)}`, label);
+  for (const person of [noivo, noiva]) { const key = fullName(person.name); if (key) existing.people.set(key, label); }
+  for (const phone of [noivo.phone, noiva.phone]) if (digits(phone).length >= 10) existing.phones.set(digits(phone), label);
 }
 
 function markDuplicates(couples, existing) {
-  const seenNames = new Set(); const seenPhones = new Set();
+  // Os casais da própria planilha também entram na conta: o segundo repetido é ignorado.
+  const seen = { names: new Map(), phones: new Map(), people: new Map() };
   return couples.map((couple) => {
-    const nameKey = `${norm(couple.noivo.name)}|${norm(couple.noiva.name)}`;
-    const couplePhones = [couple.noivo.phone, couple.noiva.phone].filter((phone) => digits(phone).length >= 10);
-    let duplicateOf = existing.names.get(nameKey) || couplePhones.map((phone) => existing.phones.get(phone)).find(Boolean) || '';
-    let reason = duplicateOf ? 'Já cadastrado na Nucleação' : '';
-    if (!duplicateOf && (seenNames.has(nameKey) || couplePhones.some((phone) => seenPhones.has(phone)))) { duplicateOf = 'repetido na planilha'; reason = 'Repetido na própria planilha'; }
-    seenNames.add(nameKey); couplePhones.forEach((phone) => seenPhones.add(phone));
-    return { ...couple, duplicate: !!duplicateOf, duplicateReason: reason, duplicateOf };
+    const hit = findExisting(couple, existing);
+    if (hit) return { ...couple, duplicate: true, duplicateReason: hit.reason, duplicateOf: hit.of };
+    const again = findExisting(couple, seen);
+    if (again) return { ...couple, duplicate: true, duplicateReason: 'Repetido na própria planilha', duplicateOf: again.of };
+    rememberCouple(couple, seen, [couple.noivo.name, couple.noiva.name].filter(Boolean).join(' & '));
+    return { ...couple, duplicate: false, duplicateReason: '', duplicateOf: '' };
   });
 }
 
@@ -172,9 +199,7 @@ router.post('/import/commit', async (req, res) => {
     for (const couple of couples) {
       const noivo = couple.noivo || {}; const noiva = couple.noiva || {};
       const label = [noivo.name, noiva.name].filter(Boolean).join(' & ') || 'Casal sem nome';
-      const nameKey = `${norm(noivo.name)}|${norm(noiva.name)}`;
-      const phoneHit = [noivo.phone, noiva.phone].some((phone) => digits(phone).length >= 10 && existing.phones.has(digits(phone)));
-      if (existing.names.has(nameKey) || phoneHit) { skipped.push(label); continue; }
+      if (findExisting(couple, existing)) { skipped.push(label); continue; }
       try {
         await createContact({
           noivoName: noivo.name, noivoEmail: noivo.email, noivoDob: noivo.dob, noivoProfession: noivo.profession, noivoEducation: noivo.education,
@@ -185,8 +210,7 @@ router.post('/import/commit', async (req, res) => {
           street: couple.street, city: couple.city, state: couple.state, notes: couple.notes,
           weddingDate: couple.weddingDate, weddingParish: couple.weddingParish, meetingDate: couple.meetingDate,
         }, { groupId });
-        existing.names.set(nameKey, label);
-        [noivo.phone, noiva.phone].forEach((phone) => { if (digits(phone).length >= 10) existing.phones.set(digits(phone), label); });
+        rememberCouple(couple, existing, label);
         imported += 1;
       } catch (error) { failed.push({ label, error: error.message }); }
     }
