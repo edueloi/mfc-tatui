@@ -18,7 +18,9 @@ const tabs = [
 ] as const;
 const tabIds = tabs.map(tab => tab.id);
 
-const fieldsClass = 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-6';
+const fieldsClass = 'grid grid-cols-2 xl:grid-cols-3 gap-x-4 sm:gap-x-6';
+/** Campo do perfil: no celular, valores longos ocupam a linha inteira (os curtos ficam lado a lado). */
+const F = (props: React.ComponentProps<typeof DetailField>) => <DetailField {...props} className={String(props.value ?? '').length > 18 || props.label.length > 20 ? 'col-span-2 sm:col-span-1' : undefined} />;
 
 const MemberProfile: React.FC = () => {
   const { memberId } = useParams<{ memberId: string }>();
@@ -93,7 +95,7 @@ const MemberProfile: React.FC = () => {
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <Button variant="outline" size="sm" disabled={!contactPhone} title={!contactPhone ? 'Telefone não informado ou incompleto' : 'Abrir conversa'} iconLeft={<MessageCircle size={14} />} onClick={() => window.open(`https://wa.me/${contactPhone}`, '_blank', 'noopener,noreferrer')}>WhatsApp</Button>
             <Button variant="outline" size="sm" disabled={!contactPhone} title={!contactPhone ? 'Telefone não informado ou incompleto' : 'Ligar para o MFCista'} iconLeft={<Phone size={14} />} onClick={() => { window.location.href = `tel:+${contactPhone}`; }}>Ligar</Button>
           </div>
@@ -104,76 +106,76 @@ const MemberProfile: React.FC = () => {
         {activeTab === 'pessoal' && <div className="space-y-3">
           <PanelCard title="Dados pessoais">
             <dl className={fieldsClass}>
-              <DetailField label="Nome completo" value={member.name} />
-              <DetailField label="Nome no crachá" value={member.nickname} />
-              <DetailField label="Data de nascimento" value={dateLabel(member.dob)} />
-              <DetailField label="Sexo" value={member.gender} />
-              <DetailField label="Estado civil" value={member.maritalStatus} />
-              <DetailField label="Naturalidade" value={member.naturalness} />
-              <DetailField label="RG" value={member.rg} />
-              <DetailField label="CPF" value={maskCPF(member.cpf || '')} />
-              <DetailField label="Religião" value={member.religion} />
+              <F label="Nome completo" value={member.name} />
+              <F label="Nome no crachá" value={member.nickname} />
+              <F label="Data de nascimento" value={dateLabel(member.dob)} />
+              <F label="Sexo" value={member.gender} />
+              <F label="Estado civil" value={member.maritalStatus} />
+              <F label="Naturalidade" value={member.naturalness} />
+              <F label="RG" value={member.rg} />
+              <F label="CPF" value={maskCPF(member.cpf || '')} />
+              <F label="Religião" value={member.religion} />
             </dl>
           </PanelCard>
           <PanelCard title="Contato e profissão">
             <dl className={fieldsClass}>
-              <DetailField label="Telefone principal" value={maskPhone(member.phone || '')} />
-              <DetailField label="Telefone de emergência" value={maskPhone(member.emergencyPhone || '')} />
-              <DetailField label="Profissão" value={member.profession} />
-              <DetailField label="Escolaridade" value={member.education} />
+              <F label="Telefone principal" value={maskPhone(member.phone || '')} />
+              <F label="Telefone de emergência" value={maskPhone(member.emergencyPhone || '')} />
+              <F label="Profissão" value={member.profession} />
+              <F label="Escolaridade" value={member.education} />
             </dl>
           </PanelCard>
         </div>}
 
         {activeTab === 'familia' && <PanelCard title="Família e vínculos">
           <dl className={fieldsClass}>
-            <DetailField label="Família" value={member.familyName} />
-            <DetailField label="Vínculo na família" value={member.relationshipType} />
-            <DetailField label="Estado civil" value={member.maritalStatus} />
-            <DetailField label="Pai" value={member.father} />
-            <DetailField label="Mãe" value={member.mother} />
+            <F label="Família" value={member.familyName} />
+            <F label="Vínculo na família" value={member.relationshipType} />
+            <F label="Estado civil" value={member.maritalStatus} />
+            <F label="Pai" value={member.father} />
+            <F label="Mãe" value={member.mother} />
           </dl>
           {hasMarriage && <div className="mt-4">
             <h3 className="text-xs font-semibold text-slate-700">Casamento</h3>
             <dl className={fieldsClass}>
-              <DetailField label="Cônjuge" value={member.spouseName} />
-              <DetailField label="CPF do cônjuge" value={maskCPF(member.spouseCpf || '')} />
-              <DetailField label="Data do casamento" value={dateLabel(member.marriageDate)} />
+              <F label="Cônjuge" value={member.spouseName} />
+              <F label="CPF do cônjuge" value={maskCPF(member.spouseCpf || '')} />
+              <F label="Data do casamento" value={dateLabel(member.marriageDate)} />
             </dl>
           </div>}
         </PanelCard>}
 
         {activeTab === 'endereco' && <PanelCard title="Endereço residencial">
           <dl className={fieldsClass}>
-            <DetailField label="CEP" value={maskCEP(member.zip || '')} />
-            <DetailField label="Logradouro" value={member.street} />
-            <DetailField label="Número" value={member.number} />
-            <DetailField label="Complemento" value={member.complement} />
-            <DetailField label="Bairro" value={member.neighborhood} />
-            <DetailField label="Cidade" value={member.city} />
-            <DetailField label="Estado" value={member.state} />
-            <DetailField label="CONDIR" value={member.condir} />
+            <F label="CEP" value={maskCEP(member.zip || '')} />
+            <F label="Logradouro" value={member.street} />
+            <F label="Número" value={member.number} />
+            <F label="Complemento" value={member.complement} />
+            <F label="Bairro" value={member.neighborhood} />
+            <F label="Cidade" value={member.city} />
+            <F label="Estado" value={member.state} />
+            <F label="CONDIR" value={member.condir} />
           </dl>
         </PanelCard>}
 
         {activeTab === 'saude' && <PanelCard title="Saúde e cuidados">
           <dl className={fieldsClass}>
-            <DetailField label="Tipo sanguíneo" value={member.bloodType} />
-            <DetailField label="Alergias" value={member.allergy} />
-            <DetailField label="Restrição alimentar" value={member.diet} />
-            <DetailField label="Medicação em uso" value={member.medication} />
-            <DetailField label="Plano de saúde" value={member.healthPlan} />
-            <DetailField label="Dificuldade de locomoção" value={member.mobilityIssue} />
-            <DetailField label="Fumante" value={member.smoker == null ? '' : member.smoker ? 'Sim' : 'Não'} />
-            <DetailField label="Pessoa com deficiência" value={member.pcd == null ? '' : member.pcd ? 'Sim' : 'Não'} />
-            {member.pcd && <DetailField label="Descrição da deficiência" value={member.pcdDescription} />}
+            <F label="Tipo sanguíneo" value={member.bloodType} />
+            <F label="Alergias" value={member.allergy} />
+            <F label="Restrição alimentar" value={member.diet} />
+            <F label="Medicação em uso" value={member.medication} />
+            <F label="Plano de saúde" value={member.healthPlan} />
+            <F label="Dificuldade de locomoção" value={member.mobilityIssue} />
+            <F label="Fumante" value={member.smoker == null ? '' : member.smoker ? 'Sim' : 'Não'} />
+            <F label="Pessoa com deficiência" value={member.pcd == null ? '' : member.pcd ? 'Sim' : 'Não'} />
+            {member.pcd && <F label="Descrição da deficiência" value={member.pcdDescription} />}
           </dl>
         </PanelCard>}
 
         {activeTab === 'historico' && <PanelCard title="Trajetória no MFC">
           <dl className={fieldsClass}>
-            <DetailField label="No MFC desde" value={dateLabel(member.mfcDate)} />
-            <DetailField label="Equipe base" value={team?.name || 'Sem equipe'} />
+            <F label="No MFC desde" value={dateLabel(member.mfcDate)} />
+            <F label="Equipe base" value={team?.name || 'Sem equipe'} />
           </dl>
           <h3 className="text-xs font-semibold text-slate-700 mt-4 mb-2">Cargos registrados</h3>
           {(member.movementRoles || []).length ? <ul className="divide-y divide-slate-100">{member.movementRoles.map((role, index) => <li key={`${role}-${index}`} className="text-[13px] text-slate-700 py-2 break-words">{role}</li>)}</ul> : <p className="text-xs text-slate-500 py-2">Nenhum cargo registrado.</p>}
@@ -181,9 +183,9 @@ const MemberProfile: React.FC = () => {
 
         {activeTab === 'registro' && <PanelCard title="Informações do cadastro">
           <dl className={fieldsClass}>
-            <DetailField label="Data de cadastro" value={dateLabel(member.createdAt)} />
-            <DetailField label="Última atualização" value={dateLabel(member.updatedAt)} />
-            <DetailField label="Status" value={member.status} />
+            <F label="Data de cadastro" value={dateLabel(member.createdAt)} />
+            <F label="Última atualização" value={dateLabel(member.updatedAt)} />
+            <F label="Status" value={member.status} />
           </dl>
           <p className="text-xs text-slate-500 mt-4">Use “Editar cadastro” para atualizar os dados deste MFCista. As credenciais de acesso são gerenciadas na área de usuários.</p>
         </PanelCard>}

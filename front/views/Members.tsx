@@ -33,6 +33,7 @@ import {
   FilterLineSearch,
   FilterLineSegmented,
   GridTable,
+  Pagination,
   usePagination,
 } from '../components/ui';
 import { MemberDirectoryCard, memberDirectoryColumns } from '../components/MemberDirectoryGrid';
@@ -194,19 +195,26 @@ const Members: React.FC = () => {
           description="Cadastros, equipes e profissões da comunidade"
           icon={Users}
           action={
-            <Button variant="primary" size="sm" iconLeft={<Plus size={14} />} onClick={() => navigate('/mfcistas/novo')}>
+            <Button variant="primary" size="sm" className="w-full sm:w-auto" iconLeft={<Plus size={14} />} onClick={() => navigate('/mfcistas/novo')}>
               Novo MFCista
             </Button>
           }
         />
 
         {/* Stats */}
+        {/* Celular: resumo em uma linha só */}
+        <div className="grid grid-cols-4 gap-2 sm:hidden" aria-label="Resumo dos MFCistas">
+          {([['Total', stats.total, 'text-blue-700'], ['Jovens e crianças', stats.children + stats.youth, 'text-amber-600'], ['3ª idade', stats.elderly, 'text-red-600'], ['Adultos', stats.adult, 'text-emerald-600']] as const).map(([label, value, color]) =>
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-1.5 py-2.5 text-center"><p className={`text-lg font-semibold leading-none ${color}`}>{value}</p><p className="mt-1.5 text-[10px] leading-tight text-slate-500">{label}</p></div>)}
+        </div>
+        <div className="hidden sm:block">
         <StatGrid cols={4}>
           <StatCard title="Total MFCistas" value={stats.total} icon={Users} color="info" description={`${stats.active} ativos`} delay={0} />
           <StatCard title="Jovens e Crianças" value={stats.children + stats.youth} icon={Baby} color="warning" description="Base do Movimento" delay={0.05} />
           <StatCard title="3ª Idade" value={stats.elderly} icon={PersonStanding} color="danger" description="Nossa Fortaleza" delay={0.1} />
           <StatCard title="Adultos" value={stats.adult} icon={UserRound} color="success" description="Força do MFC" delay={0.15} />
         </StatGrid>
+        </div>
 
         {/* Aniversariantes */}
         {activeView === 'members' && birthdays.length > 0 && (
@@ -220,14 +228,14 @@ const Members: React.FC = () => {
                 <p className="text-xs text-zinc-400 font-semibold">{birthdays.length} {birthdays.length === 1 ? 'aniversariante' : 'aniversariantes'} este mês</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin] sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3 xl:grid-cols-4">
               {birthdays.map(m => {
                 const day = new Date(m.dob).getDate();
                 const today = new Date().getDate();
                 const isToday = day === today;
                 return (
                   <div key={m.id} onClick={() => navigate(`/mfcistas/${m.id}`)}
-                    className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer hover:shadow-md transition-all ${isToday ? 'border-pink-400 bg-pink-50' : 'border-zinc-200 hover:border-amber-300'}`}>
+                    className={`flex w-[78%] shrink-0 snap-start items-center gap-3 p-3 rounded-xl border-2 cursor-pointer hover:shadow-md transition-all sm:w-auto sm:shrink ${isToday ? 'border-pink-400 bg-pink-50' : 'border-zinc-200 hover:border-amber-300'}`}>
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${m.gender === 'Masculino' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
                       {m.name.substring(0, 2)}
                     </div>
@@ -287,6 +295,7 @@ const Members: React.FC = () => {
                 { value: 'Sem equipe', label: 'Sem Equipe' },
               ]}
               size="sm"
+              className="[&>button]:whitespace-nowrap [&>button]:px-1.5 sm:[&>button]:px-2"
             />
             <Button variant={showFilters ? 'primary' : 'outline'} size="sm"
               iconLeft={<Filter className="w-3.5 h-3.5" />}
@@ -350,6 +359,17 @@ const Members: React.FC = () => {
 
         {/* Tabela */}
         {loadError && <ContentCard><EmptyState icon={Users} title="Não foi possível atualizar os MFCistas" description="Se houver dados carregados, eles continuam abaixo. Confira a conexão e tente novamente." action={<Button size="sm" onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Tentar novamente</Button>} /></ContentCard>}
+        {/* Celular e tablet: cartões (1 coluna no celular, 2 no tablet). Tabela só em telas largas. */}
+        <div className="xl:hidden">
+          {loading && paginatedData.length === 0
+            ? <p role="status" className="py-8 text-center text-sm text-slate-500">Carregando MFCistas…</p>
+            : paginatedData.length
+              ? <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{paginatedData.map(member => <MemberDirectoryCard key={member.id} member={member} actions={directoryActions} />)}</div>
+              : <ContentCard><EmptyState icon={Users} title="Nenhum MFCista encontrado" description="Tente ajustar os filtros ou cadastre um novo membro."
+                  action={<Button variant="primary" size="sm" onClick={resetFilters}>Limpar Filtros</Button>} /></ContentCard>}
+          {filtered.length > 0 && <div className="mt-3"><Pagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} /></div>}
+        </div>
+        <div className="hidden xl:block">
         <div className="member-directory-table">
           <GridTable
             columns={columns}
@@ -357,7 +377,7 @@ const Members: React.FC = () => {
             keyExtractor={(m) => m.id}
             onRowClick={(m) => navigate(`/mfcistas/${m.id}`)}
             isLoading={loading}
-            mobileBreakpoint="xl"
+            disableMobileCards
             tableMinWidth={940}
             renderMobileItem={member => <MemberDirectoryCard member={member} actions={directoryActions} />}
             emptyMessage={
@@ -366,6 +386,7 @@ const Members: React.FC = () => {
             }
             pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }}
           />
+        </div>
         </div>
         </div>
 
