@@ -2,7 +2,8 @@
 // Formato esperado (igual ao arquivo "MFC Tatuí — Encontro de Noivos"): uma linha por pessoa, duas por casal
 // (a primeira é o noivo, a segunda a noiva), ligadas pelo número da coluna "Casal".
 
-const ExcelJS = require('exceljs');
+const XLSX = require('xlsx'); // leitura: aceita planilhas de qualquer origem (inclusive XML com prefixo x:)
+const ExcelJS = require('exceljs'); // só para gerar a planilha modelo
 
 const norm = (value) => String(value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -33,23 +34,28 @@ const isoFromParts = (y, m, d) => {
   return `${y}-${pad(m)}-${pad(d)}`;
 };
 
-/** Texto de uma célula como a pessoa vê (datas viram AAAA-MM-DD para tratar em um lugar só). */
-function cellValue(cell) {
-  if (!cell) return '';
-  const value = cell.value;
+/** Valor de uma célula como texto (sem espaços sobrando; números inteiros, como telefone, sem ".0"). */
+function cellText(value) {
   if (value === null || value === undefined) return '';
-  if (value instanceof Date) return isoFromParts(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
-  if (typeof value === 'object') {
-    if (Array.isArray(value.richText)) return value.richText.map((part) => part.text).join('').trim();
-    if (value.text !== undefined) return String(value.text).trim(); // link/e-mail
-    if (value.result !== undefined) return value.result instanceof Date ? isoFromParts(value.result.getUTCFullYear(), value.result.getUTCMonth() + 1, value.result.getUTCDate()) : String(value.result ?? '').trim();
-    return String(cell.text || '').trim();
-  }
-  return String(value).trim();
+  if (value instanceof Date) return isoFromParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  return String(value).replace(/ /g, ' ').trim();
 }
 
-function toIsoDate(raw) {
-  const text = String(raw || '').trim();
+function toIsoDate(raw, date1904 = false) {
+  // Data guardada como número do Excel (ex.: 33684.9997 = 22/03/1992). A fração é só a hora e é ignorada.
+  if (typeof raw === 'number' || /^\d{4,6}(\.\d+)?$/.test(String(raw ?? '').trim())) {
+    const serial = Number(raw);
+    if (serial > 1 && serial < 2958466) {
+      // Algumas ferramentas gravam a data alguns segundos ANTES da meia-noite (ex.: 33684,99967 para 22/03/1992) e o Excel
+      // mostra o dia seguinte. Fração colada na meia-noite conta como o dia seguinte; o resto é só a hora e é ignorado.
+      const whole = Math.floor(serial);
+      const day = serial - whole >= 0.99 ? whole + 1 : whole;
+      const parts = XLSX.SSF.parse_date_code(day, { date1904 });
+      if (parts && parts.y) { const iso = isoFromParts(parts.y, parts.m, parts.d); if (iso) return { value: iso }; }
+    }
+    return { value: '', invalid: true };
+  }
+  const text = String(raw ?? '').trim();
   if (!text) return { value: '' };
   let match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (match) { const iso = isoFromParts(+match[1], +match[2], +match[3]); return iso ? { value: iso } : { value: '', invalid: true }; }
@@ -102,36 +108,47 @@ function splitCity(raw) {
 
 /** Lê o .xlsx e devolve os casais encontrados, com avisos por linha (nada é gravado aqui). */
 async function parseNucleationWorkbook(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
+  let workbook;
+  try {
+    workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false, cellNF: false, cellText: false });
+  } catch (error) {
+    const wrapped = new Error('Não foi possível abrir o arquivo. Confira se é uma planilha do Excel (.xlsx).');
+    wrapped.status = 400;
+    throw wrapped;
+  }
+  const date1904 = !!(workbook.Workbook && workbook.Workbook.WBProps && workbook.Workbook.WBProps.date1904);
 
   // Usa a primeira aba que tenha a coluna "Nome completo" (a aba se chama "Inscrições" no arquivo do Encontro).
-  let sheet = null; let headerRow = 0; let columns = null;
-  for (const candidate of workbook.worksheets) {
-    for (let r = 1; r <= Math.min(candidate.rowCount, 15) && !sheet; r += 1) {
-      const row = candidate.getRow(r);
+  let sheetName = ''; let matrix = []; let firstRow = 0; let headerIndex = -1; let columns = null;
+  for (const name of workbook.SheetNames) {
+    const ws = workbook.Sheets[name];
+    if (!ws || !ws['!ref']) continue;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true });
+    const start = XLSX.utils.decode_range(ws['!ref']).s.r;
+    for (let r = 0; r < Math.min(rows.length, 15); r += 1) {
       const found = {};
-      row.eachCell({ includeEmpty: false }, (cell, col) => {
-        const title = norm(cellValue(cell));
-        for (const [field, aliases] of Object.entries(HEADERS)) if (aliases.includes(title) && !found[field]) found[field] = col;
+      rows[r].forEach((cell, col) => {
+        const title = norm(cellText(cell));
+        for (const [field, aliases] of Object.entries(HEADERS)) if (aliases.includes(title) && found[field] === undefined) found[field] = col;
       });
-      if (found.name) { sheet = candidate; headerRow = r; columns = found; }
+      if (found.name !== undefined) { sheetName = name; matrix = rows; firstRow = start; headerIndex = r; columns = found; break; }
     }
-    if (sheet) break;
+    if (columns) break;
   }
-  if (!sheet) {
-    const error = new Error('Não encontrei a coluna "Nome completo" na planilha. Use o modelo (botão "Baixar modelo") ou confira os títulos da primeira linha.');
+  if (!columns) {
+    const error = new Error('Não encontrei a coluna "Nome completo" na planilha. Use o modelo (botão "Baixar planilha modelo") ou confira os títulos da linha de cabeçalho.');
     error.status = 400;
     throw error;
   }
 
-  const get = (row, field) => (columns[field] ? cellValue(row.getCell(columns[field])) : '');
+  const raw = (row, field) => (columns[field] === undefined ? '' : row[columns[field]]);
+  const get = (row, field) => cellText(raw(row, field));
   const rows = [];
-  for (let r = headerRow + 1; r <= sheet.rowCount; r += 1) {
-    const row = sheet.getRow(r);
+  for (let r = headerIndex + 1; r < matrix.length; r += 1) {
+    const row = matrix[r];
     const name = get(row, 'name');
     if (!name) continue;
-    rows.push({ line: r, row, name });
+    rows.push({ line: firstRow + r + 1, row, name });
   }
 
   // Agrupa por número do casal; sem número, junta de duas em duas linhas.
@@ -139,8 +156,14 @@ async function parseNucleationWorkbook(buffer) {
   for (const item of rows) {
     const key = get(item.row, 'casal');
     let group;
-    if (key) { group = byKey.get(key); if (!group) { group = { key, items: [] }; byKey.set(key, group); groups.push(group); } auto = null; }
-    else { if (!auto || auto.items.length >= 2) { auto = { key: `linha ${item.line}`, items: [] }; groups.push(auto); } group = auto; }
+    if (key) {
+      group = byKey.get(key);
+      if (!group) { group = { key, items: [] }; byKey.set(key, group); groups.push(group); }
+      auto = null;
+    } else {
+      if (!auto || auto.items.length >= 2) { auto = { key: `linha ${item.line}`, items: [] }; groups.push(auto); }
+      group = auto;
+    }
     group.items.push(item);
   }
 
@@ -152,13 +175,17 @@ async function parseNucleationWorkbook(buffer) {
 
     const person = (item, label) => {
       if (!item) return { name: '', dob: '', birthplace: '', education: '', profession: '', religion: '', parish: '', phone: '', email: '' };
-      const dob = toIsoDate(get(item.row, 'dob'));
+      const dob = toIsoDate(raw(item.row, 'dob'), date1904);
       if (dob.invalid) warnings.push(`${label}: data de nascimento "${get(item.row, 'dob')}" não reconhecida.`);
       const phone = toPhone(get(item.row, 'phone'));
       if (phone && ![10, 11].includes(phone.length)) warnings.push(`${label}: telefone "${get(item.row, 'phone')}" incompleto.`);
       let email = get(item.row, 'email').toLowerCase();
       let emailNote = '';
-      if (email && !emailOk(email)) { emailNote = `E-mail informado na ficha (${label.toLowerCase()}): ${email}`; warnings.push(`${label}: e-mail "${email}" incompleto (ficou nas observações).`); email = ''; }
+      if (email && !emailOk(email)) {
+        emailNote = `E-mail informado na ficha (${label.toLowerCase()}): ${email}`;
+        warnings.push(`${label}: e-mail "${email}" incompleto (ficou nas observações).`);
+        email = '';
+      }
       return {
         name: item.name, dob: dob.value, birthplace: get(item.row, 'birthplace'),
         education: normalizeEducation(get(item.row, 'education')), profession: get(item.row, 'profession'),
@@ -169,12 +196,13 @@ async function parseNucleationWorkbook(buffer) {
 
     const noivo = person(first, 'Noivo');
     const noiva = person(second, 'Noiva');
-    const firstValue = (field) => group.items.map((item) => get(item.row, field)).find(Boolean) || '';
-    const { city, state } = splitCity(firstValue('city'));
-    const wedding = toIsoDate(firstValue('weddingDate'));
-    const meeting = toIsoDate(firstValue('meetingDate'));
-    if (wedding.invalid) warnings.push(`Data do casamento "${firstValue('weddingDate')}" não reconhecida.`);
-    if (meeting.invalid) warnings.push(`Data do encontro "${firstValue('meetingDate')}" não reconhecida.`);
+    const firstRaw = (field) => { for (const item of group.items) { const value = raw(item.row, field); if (cellText(value)) return value; } return ''; };
+    const firstText = (field) => cellText(firstRaw(field));
+    const { city, state } = splitCity(firstText('city'));
+    const wedding = toIsoDate(firstRaw('weddingDate'), date1904);
+    const meeting = toIsoDate(firstRaw('meetingDate'), date1904);
+    if (wedding.invalid) warnings.push(`Data do casamento "${firstText('weddingDate')}" não reconhecida.`);
+    if (meeting.invalid) warnings.push(`Data do encontro "${firstText('meetingDate')}" não reconhecida.`);
     if (!noivo.phone && !noiva.phone) warnings.push('Nenhum telefone informado.');
 
     const notes = [...new Set([...group.items.map((item) => get(item.row, 'notes')), noivo.emailNote, noiva.emailNote].filter(Boolean))].join(' | ');
@@ -182,13 +210,13 @@ async function parseNucleationWorkbook(buffer) {
     return {
       id: `c${index + 1}`, number: group.key, lines: group.items.map((item) => item.line),
       noivo, noiva,
-      street: firstValue('address'), city, state,
-      weddingDate: wedding.value, weddingParish: firstValue('weddingParish'), meetingDate: meeting.value,
+      street: firstText('address'), city, state,
+      weddingDate: wedding.value, weddingParish: firstText('weddingParish'), meetingDate: meeting.value,
       notes, warnings,
     };
   });
 
-  return { sheet: sheet.name, peopleRows: rows.length, couples };
+  return { sheet: sheetName, peopleRows: rows.length, couples };
 }
 
 /** Planilha modelo com os títulos certos e um casal de exemplo. */
