@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { PhoneCall, Plus, Phone, UserPlus, Clock, XCircle, Heart, MessageCircle, Trash2, ArrowRight, Loader2, UsersRound, History } from 'lucide-react';
+import { PhoneCall, Plus, Upload, Phone, UserPlus, Clock, XCircle, Heart, MessageCircle, Trash2, ArrowRight, Loader2, UsersRound, History } from 'lucide-react';
 import { api } from '../api';
 import { NucleationContact, NucleationGroup } from '../types';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../components/ui';
 import type { Column } from '../components/ui';
 import { NucleationContactModal } from '../components/NucleationContactModal';
+import { NucleationImportModal } from '../components/NucleationImportModal';
 import { usePermission } from '../src/hooks/usePermission';
 import { maskPhone } from '../utils/masks';
 import { normalizeDirectoryText } from '../utils/memberDirectory';
@@ -34,6 +35,7 @@ const Nucleacao: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<NucleationContact | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -156,7 +158,7 @@ const Nucleacao: React.FC = () => {
     <PageWrapper className="nucleation-directory">
       <div className="min-w-0 space-y-4">
         <SectionTitle title="Nucleação" icon={PhoneCall} description="Acompanhamento de contatos, grupos e conversão em MFCista."
-          action={canCreate ? <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<UsersRound size={14} />} onClick={() => setShowGroupModal(true)}>Novo grupo</Button><Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button></div> : undefined} />
+          action={canCreate ? <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<UsersRound size={14} />} onClick={() => setShowGroupModal(true)}>Novo grupo</Button><Button variant="outline" size="sm" iconLeft={<Upload size={14} />} onClick={() => setShowImport(true)}>Importar planilha</Button><Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button></div> : undefined} />
 
         <StatGrid cols={4}>
           <StatCard title="Total de contatos" value={stats.total} icon={PhoneCall} color="info" />
@@ -198,6 +200,9 @@ const Nucleacao: React.FC = () => {
             pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
         </div>
       </div>
+
+      <NucleationImportModal isOpen={showImport} onClose={() => setShowImport(false)} groups={groups}
+        onImported={() => { setRetry(value => value + 1); }} />
 
       <NucleationContactModal isOpen={showNewModal} onClose={() => setShowNewModal(false)} groups={groups} onCreated={created => setContacts(prev => [created, ...prev])} />
 

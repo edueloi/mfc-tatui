@@ -1,5 +1,6 @@
 // Em produção a API responde no mesmo endereço do sistema (painel.<domínio>, domínio principal ou o host antigo), então sem VITE_API_URL usa a origem atual.
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? window.location.origin : 'http://localhost:4000');
+export const API_BASE_URL = API_URL.replace(/\/$/, '');
 
 export const photoSrc = (value?: string) => value?.startsWith('/uploads/')
   ? `${API_URL.replace(/\/$/, '')}${value}`
@@ -192,6 +193,12 @@ export const api = {
     request(`/nucleation/${id}/attempts`, { method: 'POST', body: JSON.stringify(data) }),
   updateNucleationAttempt: (attemptId: string, data: any) =>
     request(`/nucleation/attempts/${attemptId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  previewNucleationImport: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return request('/nucleation/import/preview', { method: 'POST', body: formData as any, headers: { 'Accept': 'application/json' } });
+  },
+  commitNucleationImport: (data: any) => request('/nucleation/import/commit', { method: 'POST', body: JSON.stringify(data) }),
   getNucleationGroups: () => request('/nucleation/groups'),
   getNucleationGroup: (id: string) => request(`/nucleation/groups/${id}`),
   createNucleationGroup: (data: any) => request('/nucleation/groups', { method: 'POST', body: JSON.stringify(data) }),

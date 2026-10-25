@@ -5,6 +5,8 @@ const { v4: uuid } = require('uuid');
 const { db } = require('../db-mysql');
 const { rowToNucleationContact, rowToNucleationAttempt, rowToMember } = require('../models/converters');
 const { nowIso } = require('../utils/helpers');
+const multer = require('multer');
+const { parseNucleationWorkbook, buildTemplateWorkbook, norm } = require('../utils/nucleationImport');
 
 const router = express.Router();
 
@@ -14,6 +16,8 @@ const CONTACT_EXTRA_COLUMNS = [
   ['noiva_name', 'VARCHAR(150)'], ['noiva_email', 'VARCHAR(150)'], ['noiva_dob', 'VARCHAR(10)'],
   ['noivo_profession', 'VARCHAR(120)'], ['noivo_education', 'VARCHAR(120)'], ['noivo_religion', 'VARCHAR(120)'],
   ['noiva_profession', 'VARCHAR(120)'], ['noiva_education', 'VARCHAR(120)'], ['noiva_religion', 'VARCHAR(120)'],
+  ['noivo_birthplace', 'VARCHAR(120)'], ['noiva_birthplace', 'VARCHAR(120)'], ['noivo_parish', 'VARCHAR(150)'], ['noiva_parish', 'VARCHAR(150)'],
+  ['wedding_date', 'VARCHAR(10)'], ['wedding_parish', 'VARCHAR(150)'], ['meeting_date', 'VARCHAR(10)'],
   ['zip', 'VARCHAR(9)'], ['street', 'VARCHAR(200)'], ['address_number', 'VARCHAR(20)'], ['neighborhood', 'VARCHAR(120)'],
   ['complement', 'VARCHAR(120)'], ['city', 'VARCHAR(120)'], ['state', 'VARCHAR(2)'], ['notes', 'TEXT'],
 ];
@@ -22,6 +26,8 @@ const CONTACT_FIELDS = {
   noivaName: 'noiva_name', noivaEmail: 'noiva_email', noivaDob: 'noiva_dob',
   noivoProfession: 'noivo_profession', noivoEducation: 'noivo_education', noivoReligion: 'noivo_religion',
   noivaProfession: 'noiva_profession', noivaEducation: 'noiva_education', noivaReligion: 'noiva_religion',
+  noivoBirthplace: 'noivo_birthplace', noivaBirthplace: 'noiva_birthplace', noivoParish: 'noivo_parish', noivaParish: 'noiva_parish',
+  weddingDate: 'wedding_date', weddingParish: 'wedding_parish', meetingDate: 'meeting_date',
   zip: 'zip', street: 'street', number: 'address_number', neighborhood: 'neighborhood',
   complement: 'complement', city: 'city', state: 'state', notes: 'notes',
 };
@@ -93,6 +99,95 @@ router.get('/', async (req, res) => {
   })));
 });
 
+// ───────── Importação de planilha (inscrições do Encontro de Noivos) ─────────
+const importUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+const digits = (value) => String(value || '').replace(/\D/g, '');
+
+// Chaves para reconhecer casais já cadastrados: nomes do casal ou algum telefone igual.
+async function loadExistingKeys() {
+  const rows = await db.prepare('SELECT id, name, phone_1, phone_2, noivo_name, noiva_name FROM nucleation_contacts').all();
+  const names = new Map(); const phones = new Map();
+  for (const row of rows) {
+    const [legacyA, legacyB] = String(row.name || '').split(/\s+&\s+/);
+    names.set(`${norm(row.noivo_name || legacyA)}|${norm(row.noiva_name || legacyB)}`, row.name);
+    for (const phone of [row.phone_1, row.phone_2]) if (digits(phone).length >= 10) phones.set(digits(phone), row.name);
+  }
+  return { names, phones };
+}
+
+function markDuplicates(couples, existing) {
+  const seenNames = new Set(); const seenPhones = new Set();
+  return couples.map((couple) => {
+    const nameKey = `${norm(couple.noivo.name)}|${norm(couple.noiva.name)}`;
+    const couplePhones = [couple.noivo.phone, couple.noiva.phone].filter((phone) => digits(phone).length >= 10);
+    let duplicateOf = existing.names.get(nameKey) || couplePhones.map((phone) => existing.phones.get(phone)).find(Boolean) || '';
+    let reason = duplicateOf ? 'Já cadastrado na Nucleação' : '';
+    if (!duplicateOf && (seenNames.has(nameKey) || couplePhones.some((phone) => seenPhones.has(phone)))) { duplicateOf = 'repetido na planilha'; reason = 'Repetido na própria planilha'; }
+    seenNames.add(nameKey); couplePhones.forEach((phone) => seenPhones.add(phone));
+    return { ...couple, duplicate: !!duplicateOf, duplicateReason: reason, duplicateOf };
+  });
+}
+
+router.get('/import/template', async (req, res) => {
+  try {
+    const workbook = await buildTemplateWorkbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="modelo-nucleacao.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) { res.status(500).json({ error: 'Não foi possível gerar o modelo: ' + error.message }); }
+});
+
+router.post('/import/preview', importUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Escolha o arquivo da planilha (.xlsx).' });
+    if (!/\.xlsx$/i.test(req.file.originalname || '')) return res.status(400).json({ error: 'Use uma planilha do Excel no formato .xlsx.' });
+    const parsed = await parseNucleationWorkbook(req.file.buffer);
+    const couples = markDuplicates(parsed.couples, await loadExistingKeys());
+    res.json({ fileName: req.file.originalname, sheet: parsed.sheet, peopleRows: parsed.peopleRows, couples });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    console.error('Erro ao ler planilha de nucleação:', error);
+    res.status(400).json({ error: 'Não foi possível ler a planilha. Confira se é um arquivo .xlsx válido. (' + error.message + ')' });
+  }
+});
+
+router.post('/import/commit', async (req, res) => {
+  try {
+    const { couples, groupId } = req.body || {};
+    if (!Array.isArray(couples) || !couples.length) return res.status(400).json({ error: 'Nenhum casal selecionado para importar.' });
+    if (couples.length > 500) return res.status(400).json({ error: 'Importe no máximo 500 casais por vez.' });
+    // Confere de novo no servidor: não duplica quem já foi cadastrado entre a prévia e a confirmação.
+    const existing = await loadExistingKeys();
+    let imported = 0; const skipped = []; const failed = [];
+    for (const couple of couples) {
+      const noivo = couple.noivo || {}; const noiva = couple.noiva || {};
+      const label = [noivo.name, noiva.name].filter(Boolean).join(' & ') || 'Casal sem nome';
+      const nameKey = `${norm(noivo.name)}|${norm(noiva.name)}`;
+      const phoneHit = [noivo.phone, noiva.phone].some((phone) => digits(phone).length >= 10 && existing.phones.has(digits(phone)));
+      if (existing.names.has(nameKey) || phoneHit) { skipped.push(label); continue; }
+      try {
+        await createContact({
+          noivoName: noivo.name, noivoEmail: noivo.email, noivoDob: noivo.dob, noivoProfession: noivo.profession, noivoEducation: noivo.education,
+          noivoReligion: noivo.religion, noivoBirthplace: noivo.birthplace, noivoParish: noivo.parish,
+          noivaName: noiva.name, noivaEmail: noiva.email, noivaDob: noiva.dob, noivaProfession: noiva.profession, noivaEducation: noiva.education,
+          noivaReligion: noiva.religion, noivaBirthplace: noiva.birthplace, noivaParish: noiva.parish,
+          phone1: digits(noivo.phone), phone2: digits(noiva.phone),
+          street: couple.street, city: couple.city, state: couple.state, notes: couple.notes,
+          weddingDate: couple.weddingDate, weddingParish: couple.weddingParish, meetingDate: couple.meetingDate,
+        }, { groupId });
+        existing.names.set(nameKey, label);
+        [noivo.phone, noiva.phone].forEach((phone) => { if (digits(phone).length >= 10) existing.phones.set(digits(phone), label); });
+        imported += 1;
+      } catch (error) { failed.push({ label, error: error.message }); }
+    }
+    res.json({ imported, skipped, failed });
+  } catch (error) {
+    console.error('Erro ao importar contatos de nucleação:', error);
+    res.status(500).json({ error: 'Erro ao importar: ' + error.message });
+  }
+});
+
 router.get('/groups', async (req, res) => {
   try {
     const groups = await db.prepare(`SELECT ng.*, COUNT(nc.id) AS contacts_count
@@ -160,47 +255,49 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Grava um contato (cadastro manual ou importação). Lança erro com .status quando os dados não servem.
+async function createContact(data, { groupId: forcedGroupId } = {}) {
+  if (data.coupleId) {
+    const existing = await db.prepare('SELECT id FROM nucleation_contacts WHERE couple_id = ?').get(data.coupleId);
+    if (existing) { const error = new Error('Este casal já foi enviado para a Nucleação.'); error.status = 400; throw error; }
+  }
+
+  const id = uuid();
+  const ts = nowIso();
+
+  const extra = {};
+  for (const [key, column] of Object.entries(CONTACT_FIELDS)) extra[column] = cleanField(key, data[key]);
+  const name = text(data.name, 150) || joinNames(extra.noivo_name, extra.noiva_name);
+  if (!name) { const error = new Error('Informe o nome do noivo ou da noiva.'); error.status = 400; throw error; }
+  let groupId = null;
+  const wantedGroup = forcedGroupId || data.groupId;
+  if (wantedGroup) {
+    const group = await db.prepare('SELECT id FROM nucleation_groups WHERE id = ?').get(wantedGroup);
+    groupId = group ? group.id : null;
+  }
+
+  const columns = ['id', 'couple_id', 'name', 'phone_1', 'phone_2', 'status', 'group_id', 'created_at', 'updated_at', ...Object.keys(extra)];
+  await db.prepare(`INSERT INTO nucleation_contacts (${columns.join(', ')}) VALUES (${columns.map(column => '@' + column).join(', ')})`).run({
+    id,
+    couple_id: data.coupleId || null,
+    name,
+    phone_1: data.phone1 || '',
+    phone_2: data.phone2 || '',
+    status: data.status || 'Pendente',
+    group_id: groupId,
+    created_at: ts,
+    updated_at: ts,
+    ...extra
+  });
+  return id;
+}
+
 router.post('/', async (req, res) => {
   try {
-    const data = req.body || {};
-
-    if (data.coupleId) {
-      const existing = await db.prepare('SELECT id FROM nucleation_contacts WHERE couple_id = ?').get(data.coupleId);
-      if (existing) {
-        return res.status(400).json({ error: 'Este casal já foi enviado para a Nucleação.' });
-      }
-    }
-
-    const id = uuid();
-    const ts = nowIso();
-
-    const extra = {};
-    for (const [key, column] of Object.entries(CONTACT_FIELDS)) extra[column] = cleanField(key, data[key]);
-    const name = text(data.name, 150) || joinNames(extra.noivo_name, extra.noiva_name);
-    if (!name) return res.status(400).json({ error: 'Informe o nome do noivo ou da noiva.' });
-    let groupId = null;
-    if (data.groupId) {
-      const group = await db.prepare('SELECT id FROM nucleation_groups WHERE id = ?').get(data.groupId);
-      groupId = group ? group.id : null;
-    }
-
-    const columns = ['id', 'couple_id', 'name', 'phone_1', 'phone_2', 'status', 'group_id', 'created_at', 'updated_at', ...Object.keys(extra)];
-    await db.prepare(`INSERT INTO nucleation_contacts (${columns.join(', ')}) VALUES (${columns.map(column => '@' + column).join(', ')})`).run({
-      id,
-      couple_id: data.coupleId || null,
-      name,
-      phone_1: data.phone1 || '',
-      phone_2: data.phone2 || '',
-      status: data.status || 'Pendente',
-      group_id: groupId,
-      created_at: ts,
-      updated_at: ts,
-      ...extra
-    });
-
-    const contact = await loadContactFull(id);
-    res.status(201).json(contact);
+    const id = await createContact(req.body || {});
+    res.status(201).json(await loadContactFull(id));
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
     console.error('Erro ao criar contato:', error);
     res.status(500).json({ error: 'Erro ao criar contato: ' + error.message });
   }

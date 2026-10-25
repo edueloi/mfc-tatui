@@ -26,6 +26,8 @@ interface FormState {
   noivaName: string; noivaPhone: string; noivaEmail: string; noivaDob: string;
   noivoProfession: string; noivoEducation: string; noivoReligion: string;
   noivaProfession: string; noivaEducation: string; noivaReligion: string;
+  noivoBirthplace: string; noivoParish: string; noivaBirthplace: string; noivaParish: string;
+  weddingDate: string; weddingParish: string; meetingDate: string;
   zip: string; street: string; number: string; neighborhood: string; complement: string; city: string; state: string;
   groupId: string; notes: string;
 }
@@ -35,6 +37,8 @@ const blank: FormState = {
   noivaName: '', noivaPhone: '', noivaEmail: '', noivaDob: '',
   noivoProfession: '', noivoEducation: '', noivoReligion: '',
   noivaProfession: '', noivaEducation: '', noivaReligion: '',
+  noivoBirthplace: '', noivoParish: '', noivaBirthplace: '', noivaParish: '',
+  weddingDate: '', weddingParish: '', meetingDate: '',
   zip: '', street: '', number: '', neighborhood: '', complement: '', city: '', state: '',
   groupId: '', notes: '',
 };
@@ -62,13 +66,15 @@ const fromContact = (contact: NucleationContact): FormState => {
     zip: contact.zip || '', street: contact.street || '', number: contact.number || '', neighborhood: contact.neighborhood || '',
     noivoProfession: contact.noivoProfession || '', noivoEducation: contact.noivoEducation || '', noivoReligion: contact.noivoReligion || '',
     noivaProfession: contact.noivaProfession || '', noivaEducation: contact.noivaEducation || '', noivaReligion: contact.noivaReligion || '',
+    noivoBirthplace: contact.noivoBirthplace || '', noivoParish: contact.noivoParish || '', noivaBirthplace: contact.noivaBirthplace || '', noivaParish: contact.noivaParish || '',
+    weddingDate: contact.weddingDate || '', weddingParish: contact.weddingParish || '', meetingDate: contact.meetingDate || '',
     complement: contact.complement || '', city: contact.city || '', state: contact.state || '',
     groupId: contact.groupId || '', notes: contact.notes || '',
   };
 };
 
 const PartnerBlock: React.FC<{ role: Role; form: FormState; errors: Record<string, string>; touched: boolean; set: (patch: Partial<FormState>) => void }> = ({ role, form, errors, touched, set }) => {
-  const k = (field: 'Name' | 'Phone' | 'Email' | 'Dob' | 'Profession' | 'Education' | 'Religion') => `${role}${field}` as keyof FormState;
+  const k = (field: 'Name' | 'Phone' | 'Email' | 'Dob' | 'Profession' | 'Education' | 'Religion' | 'Birthplace' | 'Parish') => `${role}${field}` as keyof FormState;
   const isNoivo = role === 'noivo';
   const err = (key: string) => touched && errors[key] ? <p role="alert" className="mt-1 text-xs text-red-600">{errors[key]}</p> : null;
   return <div className={`min-w-0 flex-1 space-y-3 rounded-xl border p-4 ${isNoivo ? 'border-sky-100 bg-sky-50/55' : 'border-rose-100 bg-rose-50/55'}`}>
@@ -80,10 +86,11 @@ const PartnerBlock: React.FC<{ role: Role; form: FormState; errors: Record<strin
     <div><Input label="Telefone / WhatsApp" inputMode="tel" value={form[k('Phone')]} onChange={event => set({ [k('Phone')]: maskPhone(event.target.value) })} placeholder="(00) 00000-0000" />{err(`${role}Phone`)}</div>
     <div><Input label="E-mail" type="email" inputMode="email" value={form[k('Email')]} onChange={event => set({ [k('Email')]: event.target.value })} placeholder="nome@email.com" />{err(`${role}Email`)}</div>
     <div><DatePicker label="Data de nascimento" value={form[k('Dob')]} onChange={value => set({ [k('Dob')]: value || '' })} />{err(`${role}Dob`)}</div>
+    <Input label="Naturalidade" value={form[k('Birthplace')]} onChange={event => set({ [k('Birthplace')]: event.target.value })} placeholder="Cidade/UF onde nasceu" />
     <Input label="Profissão" value={form[k('Profession')]} onChange={event => set({ [k('Profession')]: event.target.value })} placeholder="Profissão" />
     <div className="flex flex-col gap-1.5">
       <label className="ds-label">Escolaridade</label>
-      <Combobox value={form[k('Education')]} onChange={value => set({ [k('Education')]: value as string })} options={EDUCATION_LEVELS}
+      <Combobox value={form[k('Education')]} onChange={value => set({ [k('Education')]: value as string })} options={EDUCATION_LEVELS} allowCustom
         placeholder="Selecione ou busque" searchPlaceholder="Buscar escolaridade..." />
     </div>
     <div className="flex flex-col gap-1.5">
@@ -91,6 +98,7 @@ const PartnerBlock: React.FC<{ role: Role; form: FormState; errors: Record<strin
       <Combobox value={form[k('Religion')]} onChange={value => set({ [k('Religion')]: value as string })} options={RELIGIONS} allowCustom
         placeholder="Selecione ou busque" searchPlaceholder="Buscar religião..." />
     </div>
+    <Input label="Paróquia" value={form[k('Parish')]} onChange={event => set({ [k('Parish')]: event.target.value })} placeholder="Paróquia que frequenta" />
   </div>;
 };
 
@@ -147,6 +155,8 @@ export const NucleationContactModal: React.FC<NucleationContactModalProps> = ({ 
         noivaName: form.noivaName.trim(), noivaEmail: form.noivaEmail.trim(), noivaDob: form.noivaDob,
         noivoProfession: form.noivoProfession.trim(), noivoEducation: form.noivoEducation, noivoReligion: form.noivoReligion,
         noivaProfession: form.noivaProfession.trim(), noivaEducation: form.noivaEducation, noivaReligion: form.noivaReligion,
+        noivoBirthplace: form.noivoBirthplace.trim(), noivoParish: form.noivoParish.trim(), noivaBirthplace: form.noivaBirthplace.trim(), noivaParish: form.noivaParish.trim(),
+        weddingDate: form.weddingDate, weddingParish: form.weddingParish.trim(), meetingDate: form.meetingDate,
         phone1: unmask(form.noivoPhone), phone2: unmask(form.noivaPhone),
         zip: form.zip, street: form.street.trim(), number: form.number.trim(), neighborhood: form.neighborhood.trim(),
         complement: form.complement.trim(), city: form.city.trim(), state: form.state, notes: form.notes.trim(),
@@ -225,6 +235,11 @@ export const NucleationContactModal: React.FC<NucleationContactModalProps> = ({ 
 
       {step === 'acompanhamento' && <div className="mx-auto max-w-2xl space-y-3">
         <p className="text-xs text-slate-500">Organize o contato em um grupo e deixe anotações para quem for fazer as ligações.</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DatePicker label="Data do casamento" value={form.weddingDate} onChange={value => set({ weddingDate: value || '' })} />
+          <DatePicker label="Data do encontro" value={form.meetingDate} onChange={value => set({ meetingDate: value || '' })} />
+        </div>
+        <Input label="Paróquia do casamento" value={form.weddingParish} onChange={event => set({ weddingParish: event.target.value })} placeholder="Onde o casal vai (ou foi) casar" />
         <Select label="Grupo de nucleação" value={form.groupId} onChange={event => set({ groupId: event.target.value })}
           options={[{ value: '', label: 'Sem grupo' }, ...groupOptions.map(group => ({ value: group.id, label: group.name }))]} />
         <Textarea label="Observações" rows={5} maxLength={2000} value={form.notes} onChange={event => set({ notes: event.target.value })}

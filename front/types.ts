@@ -362,6 +362,8 @@ export interface NucleationContact {
   noivoName?: string; noivoEmail?: string; noivoDob?: string;
   noivaName?: string; noivaEmail?: string; noivaDob?: string;
   noivoProfession?: string; noivoEducation?: string; noivoReligion?: string;
+  noivoBirthplace?: string; noivaBirthplace?: string; noivoParish?: string; noivaParish?: string;
+  weddingDate?: string; weddingParish?: string; meetingDate?: string;
   noivaProfession?: string; noivaEducation?: string; noivaReligion?: string;
   zip?: string; street?: string; number?: string; neighborhood?: string; complement?: string; city?: string; state?: string;
   notes?: string;
