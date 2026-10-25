@@ -6,7 +6,7 @@ import { api } from '../api';
 import { NucleationContact, NucleationGroup } from '../types';
 import {
   PageWrapper, SectionTitle, StatGrid, StatCard, ContentCard, Button, IconButton, FilterLine, FilterLineSection, FilterLineItem, FilterLineSearch,
-  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, Modal, ModalFooter, Input, Select, DatePicker, PanelCard, Tabs, usePagination,
+  FilterLineSegmented, GridTable, EmptyState, Badge, ConfirmModal, Modal, ModalFooter, Input, Select, DatePicker, PanelCard, Tabs, Pagination, usePagination,
 } from '../components/ui';
 import type { Column } from '../components/ui';
 import { NucleationContactModal } from '../components/NucleationContactModal';
@@ -179,6 +179,40 @@ const Nucleacao: React.FC = () => {
     </div> },
   ];
 
+  const renderCard = (contact: NucleationContact) => {
+    const phones = [contact.phone1, contact.phone2].filter(Boolean);
+    const groupLabel = contact.groupName || groups.find(group => group.id === contact.groupId)?.name || '';
+    return <article key={contact.id} onClick={() => open(contact)}
+      className="flex min-w-0 cursor-pointer flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:border-blue-300 active:bg-slate-50">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold leading-snug text-slate-900 [overflow-wrap:anywhere]">{contact.name}</h3>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
+            <span>{contact.attemptsCount || 0} {contact.attemptsCount === 1 ? 'tentativa' : 'tentativas'}</span>
+            {contact.coupleId && <span className="inline-flex items-center gap-1 text-rose-600"><Heart size={10} />Encontro de Noivos</span>}
+            {groupLabel && <span className="inline-flex items-center gap-1 text-blue-700"><UsersRound size={10} />{groupLabel}</span>}
+          </p>
+        </div>
+        <Badge size="sm" dot color={STATUS_COLOR[contact.status] || 'default'} className="shrink-0">{contact.status}</Badge>
+      </div>
+      {phones.length > 0 && <div className="flex flex-wrap gap-2">{phones.map(phone => {
+        const url = whatsappUrl(phone, firstContactMessage(contact.name));
+        return <span key={phone} className="inline-flex items-stretch overflow-hidden rounded-full border border-slate-200 bg-white text-xs">
+          <a href={`tel:${phone.replace(/\D/g, '')}`} onClick={event => event.stopPropagation()} className="inline-flex items-center gap-1.5 px-3 py-2 font-medium text-blue-700"><Phone size={12} />{maskPhone(phone)}</a>
+          {url && <a href={url} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} aria-label={`WhatsApp ${maskPhone(phone)}`} className="inline-flex items-center border-l border-slate-200 bg-emerald-50 px-2.5 text-emerald-700"><MessageCircle size={14} /></a>}
+        </span>;
+      })}</div>}
+      <div className="mt-auto flex items-center gap-2 border-t border-slate-100 pt-3">
+        <Button variant="outline" size="sm" className="flex-1" iconRight={<ArrowRight size={12} />} onClick={event => { event.stopPropagation(); open(contact); }}>Abrir</Button>
+        {groupView !== 'geral' && canCreate && <IconButton variant="ghost" size="sm" aria-label={`Tirar ${contact.name} do grupo`} title="Tirar do grupo" onClick={event => { event.stopPropagation(); removeFromGroup(contact); }}><UserMinus size={15} className="text-slate-500" /></IconButton>}
+        {canDelete && <IconButton variant="ghost" size="sm" aria-label={`Excluir ${contact.name}`} onClick={event => { event.stopPropagation(); setDeleteTarget(contact); }}><Trash2 size={15} className="text-red-500" /></IconButton>}
+      </div>
+    </article>;
+  };
+
+  const emptyState = <EmptyState icon={PhoneCall} title="Nenhum contato encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Casais confirmados no Encontro de Noivos podem ser enviados para cá.'}
+    action={!hasFilter && canCreate ? <Button size="sm" onClick={() => setShowNewModal(true)}>Novo contato</Button> : undefined} />;
+
   if (loading) return <PageWrapper><div role="status" className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500"><Loader2 size={18} className="animate-spin" />Carregando contatos…</div></PageWrapper>;
 
   if (error && !contacts.length) return <PageWrapper><ContentCard><EmptyState icon={PhoneCall} title="Não foi possível carregar a nucleação" description="Confira a conexão e tente novamente."
@@ -188,14 +222,26 @@ const Nucleacao: React.FC = () => {
     <PageWrapper className="nucleation-directory">
       <div className="min-w-0 space-y-4">
         <SectionTitle title="Nucleação" icon={PhoneCall} description="Acompanhamento de contatos, grupos e conversão em MFCista."
-          action={canCreate ? <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<Wand2 size={14} />} onClick={() => setShowGenerate(true)}>Gerar grupos</Button><Button variant="outline" size="sm" iconLeft={<UsersRound size={14} />} onClick={() => setGroupModal({ open: true, group: null })}>Novo grupo</Button><Button variant="outline" size="sm" iconLeft={<Upload size={14} />} onClick={() => setShowImport(true)}>Importar planilha</Button><Button size="sm" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button></div> : undefined} />
+          action={canCreate ? <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+            <Button size="sm" className="col-span-3 sm:order-last" iconLeft={<Plus size={14} />} onClick={() => setShowNewModal(true)}>Novo contato</Button>
+            <Button variant="outline" size="sm" iconLeft={<Wand2 size={14} />} onClick={() => setShowGenerate(true)}><span className="sm:hidden">Gerar</span><span className="hidden sm:inline">Gerar grupos</span></Button>
+            <Button variant="outline" size="sm" iconLeft={<UsersRound size={14} />} onClick={() => setGroupModal({ open: true, group: null })}><span className="sm:hidden">Grupo</span><span className="hidden sm:inline">Novo grupo</span></Button>
+            <Button variant="outline" size="sm" iconLeft={<Upload size={14} />} onClick={() => setShowImport(true)}><span className="sm:hidden">Importar</span><span className="hidden sm:inline">Importar planilha</span></Button>
+          </div> : undefined} />
 
+        {/* Celular: resumo em uma linha só (os cartões grandes ficam para telas maiores) */}
+        <div className="grid grid-cols-4 gap-2 sm:hidden" aria-label="Resumo dos contatos">
+          {([['Total', stats.total, 'text-blue-700'], ['Em andamento', stats.emAndamento, 'text-amber-600'], ['Convertidos', stats.convertidos, 'text-emerald-600'], ['Sem sucesso', stats.semSucesso, 'text-red-600']] as const).map(([label, value, color]) =>
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-1.5 py-2.5 text-center"><p className={`text-lg font-semibold leading-none ${color}`}>{value}</p><p className="mt-1.5 text-[10px] leading-tight text-slate-500">{label}</p></div>)}
+        </div>
+        <div className="hidden sm:block">
         <StatGrid cols={4}>
           <StatCard title="Total de contatos" value={stats.total} icon={PhoneCall} color="info" />
           <StatCard title="Em andamento" value={stats.emAndamento} icon={Clock} color="warning" />
           <StatCard title="Convertidos" value={stats.convertidos} icon={UserPlus} color="success" />
           <StatCard title="Sem sucesso" value={stats.semSucesso} icon={XCircle} color="danger" />
         </StatGrid>
+        </div>
 
         <Tabs<'contatos' | 'grupos'> items={[{ id: 'contatos', label: 'Contatos', icon: PhoneCall }, { id: 'grupos', label: `Grupos e encontros (${groups.length})`, icon: CalendarDays }]} value={tab} onChange={setTab} label="Seções da Nucleação">
           {tab === 'grupos' && <NucleationGroupsBoard groups={groups} canCreate={canCreate} onOpen={openGroup} onNew={() => setGroupModal({ open: true, group: null })} onGenerate={() => setShowGenerate(true)} onAttendance={attendance} />}
@@ -214,8 +260,8 @@ const Nucleacao: React.FC = () => {
         </FilterLine>
 
         {currentGroup && <PanelCard title={currentGroup.name} icon={UsersRound} description={currentGroup.description || 'Grupo de acompanhamento da Nucleação.'}
-          action={<div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="xs" iconLeft={<FileDown size={12} />} onClick={() => attendance(currentGroup, 'download')}>Ficha de presença (PDF)</Button>
+          action={<div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+            <Button variant="outline" size="xs" iconLeft={<FileDown size={12} />} onClick={() => attendance(currentGroup, 'download')}><span className="sm:hidden">Ficha (PDF)</span><span className="hidden sm:inline">Ficha de presença (PDF)</span></Button>
             <Button variant="outline" size="xs" iconLeft={<Printer size={12} />} onClick={() => attendance(currentGroup, 'print')}>Imprimir</Button>
             {canCreate && <Button variant="outline" size="xs" iconLeft={<UserPlus size={12} />} onClick={() => setShowAddMembers(true)}>Adicionar pessoas</Button>}
             {canCreate && <Button variant="outline" size="xs" iconLeft={<Pencil size={12} />} onClick={() => setGroupModal({ open: true, group: currentGroup })}>Editar</Button>}
@@ -234,16 +280,18 @@ const Nucleacao: React.FC = () => {
         </PanelCard>}
 
         <div className="min-w-0">
-          <GridTable columns={columns} data={paginatedData} keyExtractor={contact => contact.id} onRowClick={open} mobileBreakpoint="xl" tableMinWidth={880}
-            renderMobileItem={contact => <div className="member-mobile-card">
-              <div className="member-mobile-heading"><div className="min-w-0 flex-1">{columns[0].render?.(contact)}</div>{columns[2].render?.(contact)}</div>
-              <div className="nucleation-mobile-phones">{columns[1].render?.(contact)}</div>
-              <p className="mb-3 text-xs text-slate-600 [overflow-wrap:anywhere]">Grupo: {contact.groupName || groups.find(group => group.id === contact.groupId)?.name || 'Sem grupo'}</p>
-              <div className="border-t border-slate-100 pt-3">{columns[columns.length - 1].render?.(contact)}</div>
-            </div>}
-            emptyMessage={<EmptyState icon={PhoneCall} title="Nenhum contato encontrado" description={hasFilter ? 'Ajuste a busca ou o filtro.' : 'Casais confirmados no Encontro de Noivos podem ser enviados para cá.'}
-              action={!hasFilter && canCreate ? <Button size="sm" onClick={() => setShowNewModal(true)}>Novo contato</Button> : undefined} />}
-            pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+          {/* Celular e tablet: cartões (1 coluna no celular, 2 no tablet). Tabela só a partir de telas largas. */}
+          <div className="xl:hidden">
+            {paginatedData.length
+              ? <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{paginatedData.map(renderCard)}</div>
+              : <ContentCard>{emptyState}</ContentCard>}
+            {filtered.length > 0 && <div className="mt-3"><Pagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} /></div>}
+          </div>
+          <div className="hidden xl:block">
+            <GridTable columns={columns} data={paginatedData} keyExtractor={contact => contact.id} onRowClick={open} disableMobileCards tableMinWidth={880}
+              emptyMessage={emptyState}
+              pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
+          </div>
         </div>
           </div>}
         </Tabs>

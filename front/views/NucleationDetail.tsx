@@ -168,7 +168,7 @@ const NucleationDetail: React.FC = () => {
         </div>
 
         <ContentCard padding="md">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600"><PhoneCall size={24} /></div>
               <div className="min-w-0">
@@ -226,43 +226,57 @@ const NucleationDetail: React.FC = () => {
               </PanelCard>}
           </div>}
 
-          {activeTab === 'dados' && <PanelCard title="Dados do contato">
-            {canEdit && <div className="mb-4 max-w-sm"><Select label="Grupo de nucleação" value={contact.groupId || ''} onChange={event => setGroup(event.target.value)} disabled={savingGroup}
-              options={[{ value: '', label: 'Sem grupo' }, ...groups.map(group => ({ value: group.id, label: group.name }))]} /></div>}
-            <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 xl:grid-cols-3">
-              <DetailField label="Nome" value={contact.name} />
-              <DetailField label="Noivo" value={contact.noivoName || '—'} />
-              <DetailField label="Noiva" value={contact.noivaName || '—'} />
-              <DetailField label="Telefone 1 (noivo)" value={maskPhone(contact.phone1 || '')} />
-              <DetailField label="Telefone 2 (noiva)" value={maskPhone(contact.phone2 || '')} />
-              <DetailField label="E-mail do noivo" value={contact.noivoEmail || '—'} />
-              <DetailField label="E-mail da noiva" value={contact.noivaEmail || '—'} />
-              <DetailField label="Nascimento do noivo" value={contact.noivoDob ? dateLabel(contact.noivoDob) : '—'} />
-              <DetailField label="Nascimento da noiva" value={contact.noivaDob ? dateLabel(contact.noivaDob) : '—'} />
-              <DetailField label="Naturalidade do noivo" value={contact.noivoBirthplace || '—'} />
-              <DetailField label="Naturalidade da noiva" value={contact.noivaBirthplace || '—'} />
-              <DetailField label="Paróquia do noivo" value={contact.noivoParish || '—'} />
-              <DetailField label="Paróquia da noiva" value={contact.noivaParish || '—'} />
-              <DetailField label="Data do casamento" value={contact.weddingDate ? dateLabel(contact.weddingDate) : '—'} />
-              <DetailField label="Paróquia do casamento" value={contact.weddingParish || '—'} />
-              <DetailField label="Data do encontro" value={contact.meetingDate ? dateLabel(contact.meetingDate) : '—'} />
-              <DetailField label="Profissão do noivo" value={contact.noivoProfession || '—'} />
-              <DetailField label="Profissão da noiva" value={contact.noivaProfession || '—'} />
-              <DetailField label="Escolaridade do noivo" value={contact.noivoEducation || '—'} />
-              <DetailField label="Escolaridade da noiva" value={contact.noivaEducation || '—'} />
-              <DetailField label="Religião do noivo" value={contact.noivoReligion || '—'} />
-              <DetailField label="Religião da noiva" value={contact.noivaReligion || '—'} />
-              <DetailField label="Endereço" value={[contact.street, contact.number, contact.complement, contact.neighborhood].filter(Boolean).join(', ') || '—'} />
-              <DetailField label="Cidade / UF" value={[contact.city, contact.state].filter(Boolean).join(' / ') || '—'} />
-              <DetailField label="CEP" value={contact.zip || '—'} />
-              <DetailField label="Status" value={contact.status} />
-              <DetailField label="Grupo" value={groupName || 'Sem grupo'} />
-              <DetailField label="Origem" value={origin ? `Encontro de Noivos (${origin})` : 'Cadastro manual'} />
-              <DetailField label="Cadastrado em" value={dateLabel(contact.createdAt)} />
-              <DetailField label="Última atualização" value={dateLabel(contact.updatedAt)} />
-            </dl>
-            {contact.notes && <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-700">Observações</p><p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600">{contact.notes}</p></div>}
-          </PanelCard>}
+          {activeTab === 'dados' && <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {(['noivo', 'noiva'] as const).map(role => {
+                const pick = (field: string) => ((contact as any)[`${role}${field}`] as string) || '';
+                const phone = role === 'noivo' ? contact.phone1 : contact.phone2;
+                const isNoivo = role === 'noivo';
+                return <section key={role} className={`min-w-0 rounded-xl border p-4 ${isNoivo ? 'border-sky-100 bg-sky-50/50' : 'border-rose-100 bg-rose-50/50'}`}>
+                  <h3 className={`mb-1 flex items-center gap-2 text-xs font-bold uppercase ${isNoivo ? 'text-sky-700' : 'text-rose-700'}`}><Heart size={14} />{isNoivo ? 'Noivo' : 'Noiva'}</h3>
+                  <dl className="grid grid-cols-2 gap-x-4">
+                    <DetailField className="col-span-2" label="Nome" value={pick('Name')} />
+                    <DetailField label="Telefone" value={phone ? maskPhone(phone) : ''} />
+                    <DetailField label="Nascimento" value={pick('Dob') ? dateLabel(pick('Dob')) : ''} />
+                    <DetailField className="col-span-2" label="E-mail" value={pick('Email')} />
+                    <DetailField label="Naturalidade" value={pick('Birthplace')} />
+                    <DetailField label="Profissão" value={pick('Profession')} />
+                    <DetailField label="Escolaridade" value={pick('Education')} />
+                    <DetailField label="Religião" value={pick('Religion')} />
+                    <DetailField className="col-span-2" label="Paróquia" value={pick('Parish')} />
+                  </dl>
+                </section>;
+              })}
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <PanelCard title="Endereço">
+                <dl className="grid grid-cols-2 gap-x-4">
+                  <DetailField className="col-span-2" label="Endereço" value={[contact.street, contact.number, contact.complement, contact.neighborhood].filter(Boolean).join(', ')} />
+                  <DetailField label="Cidade / UF" value={[contact.city, contact.state].filter(Boolean).join(' / ')} />
+                  <DetailField label="CEP" value={contact.zip} />
+                </dl>
+              </PanelCard>
+              <PanelCard title="Casamento e encontro">
+                <dl className="grid grid-cols-2 gap-x-4">
+                  <DetailField label="Data do casamento" value={contact.weddingDate ? dateLabel(contact.weddingDate) : ''} />
+                  <DetailField label="Data do encontro" value={contact.meetingDate ? dateLabel(contact.meetingDate) : ''} />
+                  <DetailField className="col-span-2" label="Paróquia do casamento" value={contact.weddingParish} />
+                </dl>
+              </PanelCard>
+            </div>
+            <PanelCard title="Acompanhamento">
+              {canEdit && <div className="mb-3 max-w-sm"><Select label="Grupo de nucleação" value={contact.groupId || ''} onChange={event => setGroup(event.target.value)} disabled={savingGroup}
+                options={[{ value: '', label: 'Sem grupo' }, ...groups.map(group => ({ value: group.id, label: group.name }))]} /></div>}
+              <dl className="grid grid-cols-2 gap-x-4 xl:grid-cols-3">
+                <DetailField label="Status" value={contact.status} />
+                <DetailField label="Grupo" value={groupName || 'Sem grupo'} />
+                <DetailField className="col-span-2 xl:col-span-1" label="Origem" value={origin ? `Encontro de Noivos (${origin})` : 'Cadastro manual'} />
+                <DetailField label="Cadastrado em" value={dateLabel(contact.createdAt)} />
+                <DetailField label="Última atualização" value={dateLabel(contact.updatedAt)} />
+              </dl>
+              {contact.notes && <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-700">Observações</p><p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600">{contact.notes}</p></div>}
+            </PanelCard>
+          </div>}
         </Tabs>
       </div>
 

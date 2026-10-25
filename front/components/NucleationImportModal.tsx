@@ -158,7 +158,22 @@ export const NucleationImportModal: React.FC<Props> = ({ isOpen, onClose, groups
           {stats.withWarnings > 0 && <Badge color="default">{stats.withWarnings} com avisos</Badge>}
         </div>
 
-        <div className="max-h-[48vh] overflow-auto rounded-xl border border-slate-200">
+        <ul className="max-h-[52vh] space-y-2 overflow-auto sm:hidden">
+          {preview.couples.map(couple => <li key={couple.id} className={`rounded-xl border p-3 text-xs ${couple.duplicate ? 'border-amber-200 bg-amber-50/50 text-slate-500' : 'border-slate-200 bg-white'}`}>
+            <label className="flex items-start gap-3">
+              <input type="checkbox" className="mt-0.5" aria-label={`Importar casal ${couple.number}`} checked={selected.has(couple.id)} disabled={couple.duplicate} onChange={() => toggle(couple.id)} />
+              <span className="min-w-0 flex-1">
+                <span className="mb-1 flex items-center justify-between gap-2"><span className="font-semibold text-slate-700">Casal {couple.number}{[couple.city, couple.state].filter(Boolean).length ? ` · ${[couple.city, couple.state].filter(Boolean).join('/')}` : ''}</span>
+                  {couple.duplicate ? <Badge size="sm" color="warning">{couple.duplicateReason}</Badge> : <Badge size="sm" color="success">Novo</Badge>}</span>
+                <span className="block font-medium text-slate-800 [overflow-wrap:anywhere]">{couple.noivo.name || '—'} <span className="font-normal text-slate-500">· {couple.noivo.phone ? maskPhone(couple.noivo.phone) : 'sem telefone'}</span></span>
+                <span className="block font-medium text-slate-800 [overflow-wrap:anywhere]">{couple.noiva.name || '—'} <span className="font-normal text-slate-500">· {couple.noiva.phone ? maskPhone(couple.noiva.phone) : 'sem telefone'}</span></span>
+                {!couple.duplicate && couple.warnings.map(warning => <span key={warning} className="mt-1 flex items-start gap-1 text-[11px] text-amber-700"><AlertTriangle size={11} className="mt-0.5 shrink-0" />{warning}</span>)}
+              </span>
+            </label>
+          </li>)}
+        </ul>
+
+        <div className="hidden max-h-[48vh] overflow-auto rounded-xl border border-slate-200 sm:block">
           <table className="w-full min-w-[640px] text-left text-xs">
             <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase text-slate-500">
               <tr>

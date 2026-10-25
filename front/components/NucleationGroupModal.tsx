@@ -31,17 +31,17 @@ export const ContactPicker: React.FC<{
   const allFreeSelected = free.length > 0 && free.every(contact => selected.has(contact.id));
 
   return <div className="space-y-2">
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <div className="relative min-w-0 flex-1">
         <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar por nome ou telefone…" aria-label="Buscar pessoas"
           className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-base outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 [@media(pointer:fine)]:text-sm" />
       </div>
-      <Button variant="outline" size="xs" disabled={!free.length} onClick={() => { const next = new Set(selected); if (allFreeSelected) free.forEach(contact => next.delete(contact.id)); else free.forEach(contact => next.add(contact.id)); onChange(next); }}>
+      <Button variant="outline" size="xs" className="w-full sm:w-auto" disabled={!free.length} onClick={() => { const next = new Set(selected); if (allFreeSelected) free.forEach(contact => next.delete(contact.id)); else free.forEach(contact => next.add(contact.id)); onChange(next); }}>
         {allFreeSelected ? 'Desmarcar sem grupo' : `Marcar sem grupo (${free.length})`}
       </Button>
     </div>
-    <ul className="max-h-64 divide-y divide-slate-100 overflow-auto rounded-xl border border-slate-200">
+    <ul className="max-h-[38vh] divide-y sm:max-h-64 divide-slate-100 overflow-auto rounded-xl border border-slate-200">
       {visible.length === 0 && <li className="px-3 py-6 text-center text-xs text-slate-500">Nenhuma pessoa encontrada.</li>}
       {visible.map(contact => {
         const current = groupName(contact);
