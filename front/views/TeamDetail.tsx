@@ -143,8 +143,8 @@ const TeamDetail: React.FC = () => {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={() => navigate('/equipes')}>Voltar para Equipes</Button>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" iconLeft={<UserPlus size={14} />} onClick={() => setShowAddMember(true)}>Vincular membro</Button>
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+            <Button variant="outline" size="sm" iconLeft={<UserPlus size={14} />} onClick={() => setShowAddMember(true)}><span className="sm:hidden">Vincular</span><span className="hidden sm:inline">Vincular membro</span></Button>
             <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={() => setShowEdit(true)}>Editar</Button>
             <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={() => setShowDelete(true)}>Excluir</Button>
           </div>
@@ -157,7 +157,7 @@ const TeamDetail: React.FC = () => {
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-semibold text-slate-900 break-words">{team.name}</h1>
-              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500 break-words"><MapPin size={12} className="shrink-0" />{team.city} / {team.state}{founded && ` · Cadastrada em ${founded}`}</p>
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-slate-500"><MapPin size={12} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">{team.city} / {team.state}{founded && ` · Cadastrada em ${founded}`}</span></p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Badge color={team.isYouth ? 'purple' : 'info'} dot>{team.isYouth ? 'MFC Jovem' : 'Equipe base'}</Badge>
                 <span className="text-xs text-slate-500">{teamMembers.length} {teamMembers.length === 1 ? 'membro' : 'membros'}</span>
@@ -166,11 +166,18 @@ const TeamDetail: React.FC = () => {
           </div>
         </ContentCard>
 
+        {/* Celular: resumo em uma linha só */}
+        <div className="grid grid-cols-3 gap-2 sm:hidden" aria-label="Resumo">
+          {([['Membros', teamMembers.length, 'text-blue-700'], ['Ativos', stats.active, 'text-emerald-600'], ['Aniversários no mês', stats.birthdaysThisMonth, 'text-purple-600']] as const).map(([label, value, color]) =>
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-1.5 py-2.5 text-center"><p className={`text-lg font-semibold leading-none ${color}`}>{value}</p><p className="mt-1.5 text-[10px] leading-tight text-slate-500">{label}</p></div>)}
+        </div>
+        <div className="hidden sm:block">
         <StatGrid cols={3}>
           <StatCard title="Membros" value={teamMembers.length} icon={Users} color="info" />
           <StatCard title="Ativos" value={stats.active} icon={UserCheck} color="success" />
           <StatCard title="Aniversários no mês" value={stats.birthdaysThisMonth} icon={Cake} color="purple" />
         </StatGrid>
+        </div>
 
         <Tabs<typeof tabs[number]['id']> items={tabs} value={activeTab} onChange={setActiveTab} label="Detalhes da equipe">
           {activeTab === 'membros' && <div className="space-y-3">

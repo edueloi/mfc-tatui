@@ -88,23 +88,29 @@ const Teams: React.FC = () => {
     <PageWrapper>
       <div className="space-y-4">
         <SectionTitle title="Equipes Base" icon={Layers} description={`${teams.length} equipes · ${totalMembers} MFCistas`}
-          action={<Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openForm(null)}>Nova equipe</Button>} />
+          action={<Button size="sm" className="w-full sm:w-auto" iconLeft={<Plus size={14} />} onClick={() => openForm(null)}>Nova equipe</Button>} />
 
+        {/* Celular: resumo em uma linha só */}
+        <div className="grid grid-cols-4 gap-2 sm:hidden" aria-label="Resumo">
+          {([['Equipes', baseCount, 'text-blue-700'], ['Jovem', youthCount, 'text-violet-600'], ['MFCistas', totalMembers, 'text-emerald-600'], ['Em atenção', attentionCount, 'text-amber-600']] as const).map(([label, value, color]) =>
+            <div key={label} className="rounded-xl border border-slate-200 bg-white px-1.5 py-2.5 text-center"><p className={`text-lg font-semibold leading-none ${color}`}>{value}</p><p className="mt-1.5 text-[10px] leading-tight text-slate-500">{label}</p></div>)}
+        </div>
+        <div className="hidden sm:block">
         <StatGrid cols={4}>
           <StatCard title="Equipes base" value={baseCount} icon={Layers} color="info" />
           <StatCard title="MFC Jovem" value={youthCount} icon={Baby} color="purple" />
           <StatCard title="Total de MFCistas" value={totalMembers} icon={Users} color="success" />
           <StatCard title="Equipes em atenção" value={attentionCount} icon={AlertTriangle} color="warning" description="Com 2 membros ou menos" />
         </StatGrid>
+        </div>
 
         <FilterLine>
           <FilterLineSection grow>
             <FilterLineItem grow><FilterLineSearch aria-label="Buscar equipes" value={searchTerm} onChange={setSearchTerm} placeholder="Nome da equipe ou cidade…" /></FilterLineItem>
             <FilterLineItem>
-              <FilterLineSegmented value={filterType} onChange={value => setFilterType(String(value))} options={[{ value: 'all', label: 'Todas' }, { value: 'base', label: 'Base' }, { value: 'youth', label: 'Jovem' }]} />
+              <FilterLineSegmented className="[&>button]:whitespace-nowrap" value={filterType} onChange={value => setFilterType(String(value))} options={[{ value: 'all', label: 'Todas' }, { value: 'base', label: 'Base' }, { value: 'youth', label: 'Jovem' }]} />
             </FilterLineItem>
-            <FilterLineItem><Select aria-label="Filtrar por cidade" value={cityFilter} onChange={event => setCityFilter(event.target.value)} options={cityOptions} /></FilterLineItem>
-            <FilterLineItem><Select aria-label="Ordenar equipes" value={sortBy} onChange={event => setSortBy(event.target.value)} options={sortOptions} /></FilterLineItem>
+            <FilterLineItem className="w-full sm:w-auto"><div className="grid grid-cols-2 gap-2 sm:flex"><Select aria-label="Filtrar por cidade" value={cityFilter} onChange={event => setCityFilter(event.target.value)} options={cityOptions} /><Select aria-label="Ordenar equipes" value={sortBy} onChange={event => setSortBy(event.target.value)} options={sortOptions} /></div></FilterLineItem>
           </FilterLineSection>
           <FilterLineSection align="right">
             <span className="text-xs text-slate-500">{filteredTeams.length} {filteredTeams.length === 1 ? 'equipe' : 'equipes'}</span>

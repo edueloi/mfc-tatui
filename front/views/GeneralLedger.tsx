@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   BookOpen, Plus, ArrowLeft, ArrowRight, Download, DollarSign, TrendingUp, TrendingDown, Wallet, Pencil, Trash2, Loader2, ListChecks, Table2, BarChart3, Settings2, Printer, Share2, Copy, Clock,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { api } from '../api';
@@ -95,7 +96,7 @@ const GeneralLedger: React.FC = () => {
   return (
     <PageWrapper>
       <div className="space-y-4">
-        {!book && <SectionTitle title="Livro Caixa" icon={BookOpen} description="Movimentações e mensalidades das equipes, organizadas por exercício." action={<div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" iconLeft={<Table2 size={14} />} onClick={() => setShowCenters(true)}>Centros de custo</Button><Button variant="outline" size="sm" iconLeft={<Settings2 size={14} />} onClick={() => setShowPreferences(true)}>Preferências</Button>{canCreateBook && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openBookForm(null)}>Novo livro</Button>}</div>} />}
+        {!book && <SectionTitle title="Livro Caixa" icon={BookOpen} description="Movimentações e mensalidades das equipes, organizadas por exercício." action={<div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap"><Button variant="outline" size="sm" iconLeft={<Table2 size={14} />} onClick={() => setShowCenters(true)}>Centros de custo</Button><Button variant="outline" size="sm" iconLeft={<Settings2 size={14} />} onClick={() => setShowPreferences(true)}>Preferências</Button>{canCreateBook && <Button size="sm" className="col-span-2 order-first sm:order-last" iconLeft={<Plus size={14} />} onClick={() => openBookForm(null)}>Novo livro</Button>}</div>} />}
         {book
           ? <BookDetail key={book.id} book={book} entries={entries.filter(entry => entry.entityId === book.id)} userId={userId} preferences={preferences} onPreferences={() => setShowPreferences(true)}
               onBack={() => navigate(LEDGER_BASE)} onEdit={() => openBookForm(book)} onDelete={() => setDeleteBook(book)} onPaymentsChanged={() => setRetry(value => value + 1)} onCenters={() => setShowCenters(true)}
@@ -116,6 +117,14 @@ const GeneralLedger: React.FC = () => {
   );
 };
 
+/** Número compacto para o celular (os cartões grandes ficam para telas maiores). */
+const MiniStat: React.FC<{ label: string; value: string | number; tone?: string; hint?: string }> = ({ label, value, tone = 'text-slate-900', hint }) =>
+  <div className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+    <p className="text-[10px] text-slate-500">{label}</p>
+    <p className={`mt-0.5 break-words text-sm font-semibold tabular-nums ${tone}`}>{value}</p>
+    {hint && <p className="mt-0.5 text-[10px] leading-tight text-slate-400">{hint}</p>}
+  </div>;
+
 /* ───────────────────────────── Lista de livros ───────────────────────────── */
 
 const BooksList: React.FC<{ preferences: LedgerPreferences; onPreferences: () => void; books: FinancialEntity[]; entries: LedgerEntry[]; onNew: () => void; onOpen: (book: FinancialEntity) => void; onEdit: (book: FinancialEntity) => void; onDelete: (book: FinancialEntity) => void }> = ({ preferences, onPreferences, books, entries, onNew, onOpen, onEdit, onDelete }) => {
@@ -135,11 +144,18 @@ const BooksList: React.FC<{ preferences: LedgerPreferences; onPreferences: () =>
   const totalEntries = filtered.reduce((sum, row) => sum + row.count, 0);
 
   return <div className="space-y-4">
+    <div className="grid grid-cols-3 gap-2 sm:hidden" aria-label="Resumo dos livros">
+      <MiniStat label="Livros" value={filtered.length} tone="text-blue-700" />
+      <MiniStat label="Saldo atual" value={money(totalBalance)} tone={totalBalance >= 0 ? 'text-emerald-600' : 'text-red-600'} />
+      <MiniStat label="Lançamentos" value={totalEntries} tone="text-purple-600" />
+    </div>
+    <div className="hidden sm:block">
     <StatGrid cols={3}>
       <StatCard title="Livros" value={filtered.length} icon={BookOpen} color="info" />
       <StatCard title="Saldo atual" value={money(totalBalance)} icon={Wallet} color={totalBalance >= 0 ? 'success' : 'danger'} description="Livros do filtro · somente valores realizados" />
       <StatCard title="Lançamentos" value={totalEntries} icon={ListChecks} color="purple" />
     </StatGrid>
+    </div>
     <FilterLine>
       <FilterLineSection grow>
         <FilterLineItem grow><FilterLineSearch aria-label="Buscar livro" value={search} onChange={setSearch} placeholder="Título ou ano…" /></FilterLineItem>
@@ -188,6 +204,7 @@ const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => voi
   const canDelete = usePermission('livro-caixa', 'delete');
   const [tab, setTab] = useUrlTab(bookTabIds, book.id.startsWith('mfc-team-payments-') ? 'equipes' : preferences.tab);
   const [search, setSearch] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false); // celular: filtros extras ficam recolhidos
   const [typeFilter, setTypeFilter] = useState('all');
   const [monthFilter, setMonthFilter] = useState(preferences.month);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -282,14 +299,14 @@ const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => voi
   return <>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <Button variant="ghost" size="sm" iconLeft={<ArrowLeft size={14} />} onClick={onBack}>Voltar para o Livro Caixa</Button>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+        {canCreate && <Button size="sm" className="col-span-2 order-first sm:order-last" iconLeft={<Plus size={14} />} onClick={() => openEntry(null)}>{accountTab ? 'Nova conta' : 'Novo lançamento'}</Button>}
         <Button variant="outline" size="sm" iconLeft={<Table2 size={14} />} onClick={onCenters}>Centros de custo</Button>
         <Button variant="outline" size="sm" iconLeft={<Settings2 size={14} />} onClick={onPreferences}>Preferências</Button>
-        <Button variant="outline" size="sm" iconLeft={<Share2 size={14} />} onClick={() => setShowShare(true)}>Comunicar resumo</Button>
-        <Button variant="outline" size="sm" iconLeft={<Download size={14} />} disabled={exporting} onClick={() => setShowExport(true)}>Exportar Excel / PDF</Button>
-        {canEdit && <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={onEdit}>Editar livro</Button>}
-        {canDelete && !book.id.startsWith('mfc-team-payments-') && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={onDelete}>Excluir livro</Button>}
-        {canCreate && <Button size="sm" iconLeft={<Plus size={14} />} onClick={() => openEntry(null)}>{accountTab ? 'Nova conta' : 'Novo lançamento'}</Button>}
+        <Button variant="outline" size="sm" iconLeft={<Share2 size={14} />} onClick={() => setShowShare(true)}><span className="sm:hidden">Comunicar</span><span className="hidden sm:inline">Comunicar resumo</span></Button>
+        <Button variant="outline" size="sm" iconLeft={<Download size={14} />} disabled={exporting} onClick={() => setShowExport(true)}><span className="sm:hidden">Exportar</span><span className="hidden sm:inline">Exportar Excel / PDF</span></Button>
+        {canEdit && <Button variant="outline" size="sm" iconLeft={<Pencil size={14} />} onClick={onEdit}><span className="sm:hidden">Editar</span><span className="hidden sm:inline">Editar livro</span></Button>}
+        {canDelete && !book.id.startsWith('mfc-team-payments-') && <Button variant="outline" size="sm" iconLeft={<Trash2 size={14} />} onClick={onDelete}><span className="sm:hidden">Excluir</span><span className="hidden sm:inline">Excluir livro</span></Button>}
       </div>
     </div>
 
@@ -301,6 +318,17 @@ const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => voi
       </div>
     </ContentCard>
 
+    <div className="grid grid-cols-2 gap-2 sm:hidden" aria-label="Resumo do livro">
+      <MiniStat label="Saldo inicial" value={money(Number(book.initialBalance) || 0)} tone="text-blue-700" />
+      <MiniStat label="Entradas" value={money(totals.income)} tone="text-emerald-600" />
+      <MiniStat label="Saídas" value={money(totals.expenses)} tone="text-red-600" />
+      <MiniStat label="Saldo atual" value={money(totals.balance)} tone={totals.balance >= 0 ? 'text-purple-600' : 'text-red-600'} />
+      <MiniStat label="A receber" value={money(pending.receivable)} tone="text-emerald-600" hint="Contas pendentes" />
+      <MiniStat label="A pagar" value={money(pending.payable)} tone="text-red-600" hint="Contas pendentes" />
+      <MiniStat label="Em atraso" value={pending.overdueCount} tone="text-amber-600" hint={money(pending.overdueAmount) + ' vencidos'} />
+      <MiniStat label="Saldo projetado" value={money(totals.balance + pending.receivable - pending.payable)} tone="text-blue-700" hint="Atual + a receber − a pagar" />
+    </div>
+    <div className="hidden space-y-4 sm:block">
     <StatGrid cols={4}>
       <StatCard title="Saldo inicial" value={money(Number(book.initialBalance) || 0)} icon={DollarSign} color="info" />
       <StatCard title="Entradas" value={money(totals.income)} icon={TrendingUp} color="success" />
@@ -314,6 +342,7 @@ const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => voi
       <StatCard title="Em atraso" value={pending.overdueCount} icon={Clock} color="warning" description={money(pending.overdueAmount) + ' em contas vencidas'} />
       <StatCard title="Saldo projetado" value={money(totals.balance + pending.receivable - pending.payable)} icon={Wallet} color="info" description="Saldo atual + a receber − a pagar" />
     </StatGrid>
+    </div>
     <Tabs<typeof bookTabs[number]['id']> items={bookTabs} value={tab} onChange={changeTab} label="Seções do livro caixa">
       {(tab === 'lancamentos' || accountTab) && <div className="space-y-3">
         <p className="text-xs text-slate-500">Clique em uma linha para {canEdit ? 'ver e editar' : 'consultar'} o lançamento. Variação = realizado − previsto. Os downloads respeitam os filtros; os indicadores mostram o exercício completo.</p>
@@ -321,11 +350,15 @@ const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => voi
           <FilterLineSection grow>
             <FilterLineItem grow><FilterLineSearch aria-label="Buscar lançamento" value={search} onChange={setSearch} placeholder="Descrição ou conta…" /></FilterLineItem>
             {!accountTab && <FilterLineItem><FilterLineSegmented value={typeFilter} onChange={value => setTypeFilter(String(value))} options={[{ value: 'all', label: 'Todos' }, { value: 'IN', label: 'Entradas' }, { value: 'OUT', label: 'Saídas' }]} /></FilterLineItem>}
+            <FilterLineItem className="sm:hidden"><Button variant="outline" size="sm" className="w-full" iconLeft={<SlidersHorizontal size={14} />} aria-expanded={showAdvanced} onClick={() => setShowAdvanced(value => !value)}>{showAdvanced ? 'Menos filtros' : 'Mais filtros'}</Button></FilterLineItem>
+            {/* Celular: os filtros extras ficam recolhidos e abrem em 2 colunas; a partir do tablet seguem em linha como antes. */}
+            <div className={showAdvanced ? 'grid grid-cols-2 gap-2 sm:contents' : 'hidden sm:contents'}>
             <FilterLineItem><Select aria-label="Situação" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} options={accountTab ? [{ value: 'all', label: 'Todas as pendências' }, { value: 'overdue', label: 'Em atraso' }] : [{ value: 'all', label: 'Todas as situações' }, { value: 'PENDING', label: 'Pendentes' }, { value: 'SETTLED', label: 'Pagos / recebidos' }, { value: 'overdue', label: 'Em atraso' }, { value: 'CANCELLED', label: 'Cancelados' }]} /></FilterLineItem>
             <FilterLineItem><Select aria-label="Classificação" value={kindFilter} onChange={e => setKindFilter(e.target.value)} options={[{ value: 'all', label: 'Fixos e variáveis' }, { value: 'FIXED', label: 'Fixos' }, { value: 'VARIABLE', label: 'Variáveis' }]} /></FilterLineItem>
             <FilterLineItem><Select aria-label="Centro de custo" value={centerFilter} onChange={e => setCenterFilter(e.target.value)} options={[{ value: '', label: 'Todos os centros' }, ...[...new Set(entries.map(e => e.costCenter).filter(Boolean))].sort().map(value => ({ value, label: value }))]} /></FilterLineItem>
             <FilterLineItem><Select aria-label="Conta financeira" value={accountFilter} onChange={e => setAccountFilter(e.target.value)} options={[{ value: '', label: 'Todas as contas' }, ...[...new Set(entries.map(e => e.financialAccount).filter(Boolean))].sort().map(value => ({ value, label: value }))]} /></FilterLineItem>
             <FilterLineItem><Select aria-label="Mês" value={monthFilter} onChange={event => setMonthFilter(event.target.value)} options={[{ value: 'all', label: 'Todos os meses' }, ...monthNames.map((label, index) => ({ value: String(index + 1), label }))]} /></FilterLineItem>
+            </div>
           </FilterLineSection>
           <FilterLineSection align="right">
             <span className="text-xs text-slate-500">{filtered.length} {filtered.length === 1 ? 'lançamento' : 'lançamentos'}</span>
@@ -334,6 +367,11 @@ const BookDetail: React.FC<{ onCenters: () => void; onPaymentsChanged: () => voi
         </FilterLine>
         <ContentCard padding="none">
           <GridTable<LedgerEntry> data={paginatedData} columns={columns} keyExtractor={entry => entry.id} noDesktopCard onRowClick={entry => openEntry(entry)}
+            renderMobileItem={entry => <div className="min-w-0">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-sm font-medium text-slate-900 [overflow-wrap:anywhere]">{entry.description || entry.category || 'Sem descrição'}</p><p className="mt-0.5 text-[11px] text-slate-500">{[dateLabel(entry.date), entry.description && entry.category ? entry.category : ''].filter(Boolean).join(' · ')}</p></div>
+                <span className={`shrink-0 text-sm font-semibold tabular-nums ${entry.type === 'IN' ? 'text-emerald-700' : 'text-red-600'}`}>{entry.type === 'IN' ? '+' : '−'} {money(entry.amount)}</span></div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5"><Badge size="sm" dot color={entry.type === 'IN' ? 'success' : 'danger'}>{entry.type === 'IN' ? 'Entrada' : 'Saída'}</Badge><Badge size="sm" color={isOverdue(entry, today) ? 'danger' : isSettled(entry) ? 'success' : 'default'}>{entryStatusLabel(entry, today)}</Badge>{entry.costCenter && <span className="text-[11px] text-slate-500">{entry.costCenter}</span>}</div>
+            </div>}
             emptyMessage={<EmptyState icon={ListChecks} title={entries.length ? 'Nenhum lançamento encontrado' : 'Nenhum lançamento neste livro'} description={entries.length ? 'Ajuste a busca ou os filtros.' : 'Registre a primeira entrada ou saída do exercício.'}
               action={canCreate ? <Button size="sm" onClick={() => openEntry(null)}>Novo lançamento</Button> : undefined} />}
             pagination={{ total: filtered.length, page, pageSize, onPageChange: setPage, onPageSizeChange: setPageSize }} />
